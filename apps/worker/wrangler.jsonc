@@ -1,0 +1,45 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "nova-ai-cloud",
+  "main": "src/index.ts",
+  "compatibility_date": "2025-09-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "observability": { "enabled": true },
+
+  // Serve the built web app from the same Worker (single origin => no CORS pain).
+  "assets": {
+    "directory": "../web/dist",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*"]
+  },
+
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "nova-db",
+      "database_id": "REPLACE_WITH_REAL_D1_ID",
+      "migrations_dir": "migrations"
+    }
+  ],
+
+  "r2_buckets": [
+    { "binding": "FILES", "bucket_name": "nova-files" }
+  ],
+
+  // Workers AI. NOTE: the AI binding ALWAYS calls Cloudflare's remote service.
+  // Under `wrangler dev --local` it fails with "Binding AI needs to be run remotely".
+  // Use `wrangler dev --remote` (+ `wrangler login`) for real local inference,
+  // or deploy. The router reports this state honestly instead of faking output.
+  "ai": { "binding": "AI" },
+
+  // Isolated sandbox Worker (no secrets, no D1, no R2). See /sandbox.
+  "services": [
+    { "binding": "SANDBOX", "service": "nova-sandbox" }
+  ],
+
+  "vars": {
+    "NOVA_RUNTIME": "workers",
+    "NOVA_VERSION": "0.1.0"
+  }
+}

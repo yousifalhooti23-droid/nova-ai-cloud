@@ -1,0 +1,70 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "NOVA AI Cloud",
+  "version": "0.1.0",
+  "identifier": "ai.nova.cloud",
+  "build": {
+    "beforeDevCommand": "",
+    "beforeBuildCommand": "",
+    "devUrl": "http://127.0.0.1:8787"
+  },
+  "app": {
+    "windows": [],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": [
+      "nsis",
+      "portable"
+    ],
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.ico"
+    ],
+    "resources": [
+      "sidecar/nova-server.exe"
+    ],
+    "category": "DeveloperTools",
+    "shortDescription": "Personal cloud AI platform: chat + agentic coding",
+    "longDescription": "NOVA AI Cloud combines conversational AI with an agentic coding environment (file editing behind diff approval, project search, git history, task planning, isolated command sandbox) in one desktop application. AI models are reached online through OpenRouter or Cloudflare Workers AI; no model weights are bundled.",
+    "publisher": "NOVA",
+    "copyright": "Copyright © 2026 NOVA",
+    "license": "MIT",
+    "nsis": {
+      "installMode": "currentUser",
+      "installerIcon": "icons/icon.ico",
+      "startMenuFolder": "NOVA AI Cloud",
+      "displayLanguageSelector": false,
+      "languages": [
+        "English"
+      ],
+      "installerHooks": "nsis-hooks.nsi"
+    },
+    "windows": {
+      "certificateThumbprint": null,
+      "digestAlgorithm": null,
+      "timestampUrl": null,
+      "webviewInstallMode": {
+        "type": "downloadBootstrapper",
+        "silent": true
+      }
+    },
+    "createUpdaterArtifacts": false
+  },
+  "plugins": {
+    "updater": {
+      "endpoints": [
+        "https://github.com/yousifalhooti23-droid/nova-ai-cloud/releases/latest/download/latest.json"
+      ],
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDgzQjM0NDc3QkI2QkFGMEYKUldRUHIydTdkMFN6Z3ltSHphcnQrOGVtSXM2L3RDaGtodGhtSHZOZDNMOE01ejRCcXJCUlU1UnEK",
+      "windows": {
+        "installMode": "passive"
+      }
+    }
+  }
+}

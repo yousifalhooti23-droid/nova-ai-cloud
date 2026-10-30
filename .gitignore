@@ -1,0 +1,19 @@
+node_modules/
+dist/
+.wrangler/
+.dev.vars
+.env
+.env.local
+*.log
+.nova-data/
+coverage/
+.DS_Store
+*.tsbuildinfo
+apps/web/tsconfig.tsbuildinfo
+
+# desktop build outputs
+apps/desktop/src-tauri/target/
+apps/desktop/src-tauri/sidecar/
+apps/desktop/src-tauri/.keys/
+apps/desktop/gen/
+build/

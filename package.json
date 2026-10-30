@@ -1,0 +1,45 @@
+{
+  "name": "nova-ai-cloud",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "workspaces": [
+    "packages/*",
+    "apps/*",
+    "sandbox/*"
+  ],
+  "scripts": {
+    "dev": "node scripts/dev.mjs",
+    "dev:sandbox": "node scripts/dev.mjs --sandbox",
+    "dev:worker": "npm run dev --workspace @nova/worker",
+    "dev:web": "npm run dev --workspace @nova/web",
+    "dev:node": "npm run dev:node --workspace @nova/worker",
+    "build": "npm run build --workspace @nova/web",
+    "build:worker": "npm run build --workspace @nova/worker",
+    "test": "vitest run",
+    "test:backend": "vitest run --project backend",
+    "test:web": "vitest run --project web",
+    "test:watch": "vitest",
+    "typecheck": "npm run typecheck --workspace @nova/worker && npm run typecheck --workspace @nova/web",
+    "db:migrate:local": "npm run db:migrate:local --workspace @nova/worker",
+    "db:migrate:remote": "npm run db:migrate:remote --workspace @nova/worker",
+    "deploy": "npm run build && npm run deploy --workspace @nova/worker",
+    "smoke": "node scripts/smoke.mjs",
+    "sandbox:selftest": "node scripts/sandbox-selftest.mjs",
+    "dev:sandbox-worker": "npm run dev --workspace @nova/sandbox-worker",
+    "verify:openrouter": "node scripts/verify-openrouter.mjs",
+    "probe:openrouter": "node scripts/probe-openrouter-free.mjs",
+    "desktop:sidecar": "node scripts/build-sidecar.mjs --target node20-win-x64",
+    "desktop:sidecar:linux": "node scripts/build-sidecar.mjs --target node20-linux-x64",
+    "desktop:icons": "npm run icon --workspace @nova/desktop"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.2",
+    "js-yaml": "^5.5.0",
+    "typescript": "^5.7.3",
+    "vitest": "^2.1.8"
+  },
+  "engines": {
+    "node": ">=20.11"
+  }
+}

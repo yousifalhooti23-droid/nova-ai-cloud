@@ -1,0 +1,96 @@
+# NOVA AI Cloud — publish a signed Windows release (the updater feed)
+# ==================================================================
+# Trigger: push a tag like v0.2.0
+#
+# Requires repository secrets:
+#   TAURI_SIGNING_PRIVATE_KEY           (content of apps/desktop/src-tauri/.keys/nova-ai-cloud.key)
+#   TAURI_SIGNING_PRIVATE_KEY_PASSWORD  (the password chosen when the key was generated)
+#
+# Produces a GitHub Release containing:
+#   NOVA-AI-Cloud-Setup.exe, NOVA-AI-Cloud-Portable.exe,
+#   the signed updater bundle (.nsis.zip + .sig) and latest.json
+# Installed apps read latest.json to self-update (passive mode).
+
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+
+jobs:
+  release-windows:
+    name: signed release (windows x64)
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci --no-audit --no-fund
+      - run: npm run build
+      - run: node scripts/build-sidecar.mjs --target node20-win-x64
+
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: apps/desktop/src-tauri
+
+      - name: build + sign (nsis, portable, updater artifacts)
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          projectPath: apps/desktop
+          args: >-
+            --bundles nsis,portable --target x86_64-pc-windows-msvc
+            --config {"bundle":{"createUpdaterArtifacts":"v1Compatible"}}
+
+      - name: collect artifacts + assemble latest.json
+        id: pack
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $ver = (Get-Content apps/desktop/src-tauri/tauri.conf.json | ConvertFrom-Json).version
+          New-Item -ItemType Directory -Force -Path dist-out | Out-Null
+
+          $bundle = "apps/desktop/src-tauri/target/x86_64-pc-windows-msvc/release/bundle"
+          $nsis   = Get-ChildItem "$bundle/nsis/*.exe"      | Select-Object -First 1
+          $port   = Get-ChildItem "$bundle/portable/*.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
+          $upZip  = Get-ChildItem "$bundle/nsis/*.nsis.zip"     -ErrorAction SilentlyContinue | Select-Object -First 1
+          $upSig  = Get-ChildItem "$bundle/nsis/*.nsis.zip.sig" -ErrorAction SilentlyContinue | Select-Object -First 1
+
+          Copy-Item $nsis.FullName "dist-out/NOVA-AI-Cloud-Setup.exe"
+          if ($port)  { Copy-Item $port.FullName  "dist-out/NOVA-AI-Cloud-Portable.exe" }
+          if ($upZip) { Copy-Item $upZip.FullName "dist-out/" }
+          if ($upSig) { Copy-Item $upSig.FullName "dist-out/" }
+
+          if ($upZip -and $upSig) {
+            $sig  = (Get-Content $upSig.FullName -Raw).Trim()
+            $tag  = $env:GITHUB_REF_NAME
+            $url  = "https://github.com/$env:GITHUB_REPOSITORY/releases/download/$tag/$($upZip.Name)"
+            $json = @{
+              version  = $ver
+              notes    = "NOVA AI Cloud $tag — see the release page."
+              pub_date = (Get-Date -AsUTC -Format "yyyy-MM-ddTHH:mm:ssZ")
+              platforms = @{
+                "windows-x86_64" = @{ signature = $sig; url = $url }
+              }
+            } | ConvertTo-Json -Depth 6
+            Set-Content -Path "dist-out/latest.json" -Value $json
+            Write-Host "✅ latest.json written for version $ver"
+          } else {
+            Write-Host "⚠️ no updater artifacts — was createUpdaterArtifacts enabled and are the signing secrets set?"
+          }
+          Get-ChildItem dist-out | ForEach-Object { Write-Host ("  {0,-44} {1,8:N1} MB" -f $_.Name, ($_.Length/1MB)) }
+
+      - name: publish GitHub Release (this IS the updater feed)
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist-out/*
+          generate_release_notes: true

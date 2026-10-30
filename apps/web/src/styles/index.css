@@ -1,0 +1,446 @@
+@import "tailwindcss";
+
+/* ------------------------------------------------------------------ *
+ * NOVA design tokens — dark UI inspired by Claude + Cursor.
+ * Only semantic tokens are exposed so the whole app stays consistent.
+ * ------------------------------------------------------------------ */
+@theme {
+  --color-bg: #0b0d10;
+  --color-surface: #101318;
+  --color-panel: #151920;
+  --color-elevated: #1b2029;
+  --color-line: #232a34;
+  --color-line-strong: #333c49;
+  --color-text: #e8eaed;
+  --color-muted: #98a2b0;
+  --color-dim: #6b7480;
+  --color-accent: #d97757;
+  --color-accent-hover: #e2876a;
+  --color-accent-soft: #2a1c17;
+  --color-info: #7aa2f7;
+  --color-success: #79c98d;
+  --color-warning: #e0b341;
+  --color-danger: #e5697a;
+
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+    "Noto Sans Arabic", "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", "Cascadia Code",
+    Menlo, Consolas, "Liberation Mono", monospace;
+
+  --radius-panel: 12px;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  overscroll-behavior: none;
+}
+
+* {
+  border-color: var(--color-line);
+}
+
+::selection {
+  background: color-mix(in oklab, var(--color-accent) 38%, transparent);
+}
+
+/* Scrollbars: thin, dark, unobtrusive (Cursor-like) */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-line-strong) transparent;
+}
+*::-webkit-scrollbar {
+  width: 9px;
+  height: 9px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+*::-webkit-scrollbar-thumb {
+  background: var(--color-line-strong);
+  border-radius: 8px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: #46505e;
+  background-clip: padding-box;
+}
+
+/* ------------------------------------------------------------------ *
+ * Component primitives (plain CSS so they work identically in RTL/LTR)
+ * ------------------------------------------------------------------ */
+.panel {
+  background: var(--color-panel);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-panel);
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1;
+  padding: 8px 12px;
+  cursor: pointer;
+  transition: background-color 0.14s ease, border-color 0.14s ease, color 0.14s ease,
+    opacity 0.14s ease;
+  white-space: nowrap;
+  user-select: none;
+}
+.btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.btn:focus-visible {
+  outline: 2px solid color-mix(in oklab, var(--color-accent) 60%, transparent);
+  outline-offset: 1px;
+}
+.btn-primary {
+  background: var(--color-accent);
+  color: #17110e;
+  font-weight: 600;
+}
+.btn-primary:hover:not(:disabled) {
+  background: var(--color-accent-hover);
+}
+.btn-ghost {
+  background: transparent;
+  color: var(--color-muted);
+  border-color: transparent;
+}
+.btn-ghost:hover:not(:disabled) {
+  background: var(--color-elevated);
+  color: var(--color-text);
+}
+.btn-outline {
+  background: var(--color-elevated);
+  border-color: var(--color-line-strong);
+  color: var(--color-text);
+}
+.btn-outline:hover:not(:disabled) {
+  border-color: #46505e;
+  background: #222933;
+}
+.btn-danger {
+  background: color-mix(in oklab, var(--color-danger) 16%, transparent);
+  border-color: color-mix(in oklab, var(--color-danger) 40%, transparent);
+  color: var(--color-danger);
+}
+.btn-danger:hover:not(:disabled) {
+  background: color-mix(in oklab, var(--color-danger) 26%, transparent);
+}
+.btn-success {
+  background: color-mix(in oklab, var(--color-success) 16%, transparent);
+  border-color: color-mix(in oklab, var(--color-success) 38%, transparent);
+  color: var(--color-success);
+}
+.btn-success:hover:not(:disabled) {
+  background: color-mix(in oklab, var(--color-success) 26%, transparent);
+}
+.btn-sm {
+  padding: 5px 9px;
+  font-size: 12px;
+  border-radius: 7px;
+}
+.btn-icon {
+  padding: 7px;
+  border-radius: 8px;
+}
+
+.input {
+  width: 100%;
+  background: var(--color-surface);
+  border: 1px solid var(--color-line-strong);
+  border-radius: 8px;
+  padding: 8px 11px;
+  color: var(--color-text);
+  font-size: 13px;
+  font-family: inherit;
+  transition: border-color 0.14s ease, box-shadow 0.14s ease;
+}
+.input::placeholder {
+  color: var(--color-dim);
+}
+.input:focus {
+  outline: none;
+  border-color: color-mix(in oklab, var(--color-accent) 62%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--color-accent) 14%, transparent);
+}
+textarea.input {
+  resize: none;
+  line-height: 1.55;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border-radius: 999px;
+  border: 1px solid var(--color-line-strong);
+  background: var(--color-elevated);
+  padding: 3px 9px;
+  font-size: 11.5px;
+  color: var(--color-muted);
+  white-space: nowrap;
+}
+
+.card-hover {
+  transition: background-color 0.14s ease, border-color 0.14s ease;
+}
+.card-hover:hover {
+  background: var(--color-elevated);
+  border-color: var(--color-line-strong);
+}
+
+.scroll-thin {
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+
+/* Focus ring for keyboard users on custom widgets */
+[data-focusable]:focus-visible {
+  outline: 2px solid color-mix(in oklab, var(--color-accent) 60%, transparent);
+  outline-offset: 1px;
+}
+
+/* ------------------------------------------------------------------ *
+ * Markdown rendering inside chat messages
+ * ------------------------------------------------------------------ */
+.markdown {
+  font-size: 14px;
+  line-height: 1.72;
+  color: var(--color-text);
+  word-break: break-word;
+}
+.markdown > *:first-child {
+  margin-top: 0;
+}
+.markdown > *:last-child {
+  margin-bottom: 0;
+}
+.markdown p {
+  margin: 0 0 0.85em;
+}
+.markdown h1,
+.markdown h2,
+.markdown h3,
+.markdown h4 {
+  margin: 1.4em 0 0.6em;
+  font-weight: 650;
+  line-height: 1.3;
+}
+.markdown h1 {
+  font-size: 1.35em;
+}
+.markdown h2 {
+  font-size: 1.2em;
+}
+.markdown h3 {
+  font-size: 1.08em;
+}
+.markdown h4 {
+  font-size: 1em;
+  color: var(--color-muted);
+}
+.markdown ul,
+.markdown ol {
+  margin: 0 0 0.85em;
+  padding-inline-start: 1.4em;
+}
+.markdown li {
+  margin: 0.28em 0;
+}
+.markdown li > ul,
+.markdown li > ol {
+  margin: 0.28em 0 0;
+}
+.markdown ul {
+  list-style: disc;
+}
+.markdown ol {
+  list-style: decimal;
+}
+.markdown a {
+  color: var(--color-info);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.markdown blockquote {
+  margin: 0.9em 0;
+  padding: 0.2em 1em;
+  border-inline-start: 3px solid var(--color-line-strong);
+  color: var(--color-muted);
+}
+.markdown hr {
+  border: none;
+  border-top: 1px solid var(--color-line);
+  margin: 1.4em 0;
+}
+.markdown code:not(pre code) {
+  font-family: var(--font-mono);
+  font-size: 0.88em;
+  background: var(--color-elevated);
+  border: 1px solid var(--color-line);
+  border-radius: 5px;
+  padding: 0.12em 0.38em;
+  color: #f0b8a4;
+}
+.markdown table {
+  border-collapse: collapse;
+  margin: 0.9em 0;
+  width: 100%;
+  font-size: 0.94em;
+  display: block;
+  overflow-x: auto;
+}
+.markdown th,
+.markdown td {
+  border: 1px solid var(--color-line-strong);
+  padding: 6px 10px;
+  text-align: start;
+}
+.markdown th {
+  background: var(--color-elevated);
+  font-weight: 600;
+}
+.markdown img {
+  max-width: 100%;
+  border-radius: 8px;
+}
+
+/* ------------------------------------------------------------------ *
+ * Diff view
+ * ------------------------------------------------------------------ */
+.diff-line {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  line-height: 1.55;
+  white-space: pre;
+  display: flex;
+  gap: 10px;
+}
+.diff-add {
+  background: color-mix(in oklab, var(--color-success) 12%, transparent);
+}
+.diff-add .diff-gutter {
+  color: var(--color-success);
+}
+.diff-del {
+  background: color-mix(in oklab, var(--color-danger) 12%, transparent);
+}
+.diff-del .diff-gutter {
+  color: var(--color-danger);
+}
+.diff-gutter {
+  flex: 0 0 auto;
+  width: 2.6em;
+  text-align: end;
+  color: var(--color-dim);
+  user-select: none;
+}
+
+/* ------------------------------------------------------------------ *
+ * Animations
+ * ------------------------------------------------------------------ */
+@keyframes nova-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.animate-in {
+  animation: nova-fade-in 0.18s ease-out both;
+}
+
+@keyframes nova-pulse-dot {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+.pulse-dot {
+  animation: nova-pulse-dot 1.1s ease-in-out infinite;
+}
+
+@keyframes nova-shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+.shimmer {
+  background: linear-gradient(
+    90deg,
+    var(--color-elevated) 25%,
+    #262d38 50%,
+    var(--color-elevated) 75%
+  );
+  background-size: 200% 100%;
+  animation: nova-shimmer 1.6s linear infinite;
+}
+
+/* CodeMirror theming to match NOVA */
+.cm-editor {
+  height: 100%;
+  background: var(--color-surface) !important;
+  font-family: var(--font-mono);
+}
+.cm-editor.cm-focused {
+  outline: none !important;
+}
+.cm-scroller {
+  font-family: var(--font-mono) !important;
+  font-size: 13px;
+  line-height: 1.65;
+}
+.cm-gutters {
+  background: var(--color-surface) !important;
+  border-inline-end: 1px solid var(--color-line) !important;
+  color: var(--color-dim) !important;
+}
+.cm-activeLineGutter {
+  background: var(--color-elevated) !important;
+  color: var(--color-muted) !important;
+}
+.cm-activeLine {
+  background: color-mix(in oklab, var(--color-elevated) 45%, transparent) !important;
+}
+.cm-content {
+  caret-color: var(--color-accent);
+}
+.cm-selectionBackground,
+.cm-editor ::selection {
+  background: color-mix(in oklab, var(--color-info) 26%, transparent) !important;
+}
+.cm-tooltip {
+  background: var(--color-elevated) !important;
+  border: 1px solid var(--color-line-strong) !important;
+  border-radius: 8px !important;
+}

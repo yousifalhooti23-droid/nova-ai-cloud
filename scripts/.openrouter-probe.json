@@ -1,0 +1,176 @@
+{
+  "probedAt": "2026-10-30T12:25:17.359Z",
+  "results": [
+    {
+      "id": "recursive/flint-v1.0:free",
+      "status": 503,
+      "verdict": "NO PROVIDER",
+      "detail": "Provider returned error",
+      "ms": 1001,
+      "ctx": 262144,
+      "tools": true
+    },
+    {
+      "id": "xingchen-agi/xing4.0-29b-a4b:free",
+      "status": 429,
+      "verdict": "RATE LIMITED",
+      "detail": "Provider returned error",
+      "ms": 2607,
+      "ctx": 262144,
+      "tools": true
+    },
+    {
+      "id": "nvidia/nemotron-3.5-super-vl:free",
+      "status": 200,
+      "verdict": "WORKS",
+      "detail": "(empty)",
+      "ms": 234,
+      "ctx": 1000000,
+      "tools": true
+    },
+    {
+      "id": "dots-studio/dots-3-note-preview:free",
+      "status": 200,
+      "verdict": "WORKS",
+      "detail": "(empty)",
+      "ms": 339,
+      "ctx": 512000,
+      "tools": true
+    },
+    {
+      "id": "liquid/lfm-2.5-2.6b:free",
+      "status": 429,
+      "verdict": "RATE LIMITED",
+      "detail": "Provider returned error",
+      "ms": 288,
+      "ctx": 65536,
+      "tools": true
+    },
+    {
+      "id": "nvidia/nemotron-3.5-lightning:free",
+      "status": 200,
+      "verdict": "WORKS",
+      "detail": "(empty)",
+      "ms": 314,
+      "ctx": 1000000,
+      "tools": true
+    },
+    {
+      "id": "thinkingmachines/inkling-small:free",
+      "status": 403,
+      "verdict": "GATED (agentic harness only)",
+      "detail": "thinkingmachines/inkling-small:free is only available on agentic harnesses. Try plugging it into a coding agen",
+      "ms": 25,
+      "ctx": 1048576,
+      "tools": true
+    },
+    {
+      "id": "poolside/laguna-s-2.1:free",
+      "status": 200,
+      "verdict": "WORKS",
+      "detail": "I'm sorry",
+      "ms": 899,
+      "ctx": 262144,
+      "tools": true
+    },
+    {
+      "id": "thinkingmachines/inkling:free",
+      "status": 403,
+      "verdict": "GATED (agentic harness only)",
+      "detail": "thinkingmachines/inkling:free is only available on agentic harnesses. Try plugging it into a coding agent or p",
+      "ms": 20,
+      "ctx": 1048576,
+      "tools": true
+    },
+    {
+      "id": "poolside/laguna-xs-2.1:free",
+      "status": 429,
+      "verdict": "RATE LIMITED",
+      "detail": "Provider returned error",
+      "ms": 281,
+      "ctx": 262144,
+      "tools": true
+    },
+    {
+      "id": "cohere/north-mini-code:free",
+      "status": 200,
+      "verdict": "WORKS",
+      "detail": "(empty)",
+      "ms": 355,
+      "ctx": 256000,
+      "tools": true
+    },
+    {
+      "id": "nvidia/nemotron-3.5-content-safety:free",
+      "status": 404,
+      "verdict": "HTTP 404",
+      "detail": "Provider returned error",
+      "ms": 104,
+      "ctx": 128000,
+      "tools": false
+    },
+    {
+      "id": "nvidia/nemotron-3-ultra-550b-a55b:free",
+      "status": 200,
+      "verdict": "WORKS",
+      "detail": "The user wants me",
+      "ms": 330,
+      "ctx": 1000000,
+      "tools": true
+    },
+    {
+      "id": "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free",
+      "status": 200,
+      "verdict": "WORKS",
+      "detail": "(empty)",
+      "ms": 294,
+      "ctx": 256000,
+      "tools": true
+    },
+    {
+      "id": "google/gemma-4-26b-a4b-it:free",
+      "status": 429,
+      "verdict": "RATE LIMITED",
+      "detail": "Provider returned error",
+      "ms": 354,
+      "ctx": 262144,
+      "tools": true
+    },
+    {
+      "id": "google/gemma-4-31b-it:free",
+      "status": 429,
+      "verdict": "RATE LIMITED",
+      "detail": "Provider returned error",
+      "ms": 351,
+      "ctx": 262144,
+      "tools": true
+    },
+    {
+      "id": "google/lyria-3-pro-preview",
+      "status": 400,
+      "verdict": "HTTP 400",
+      "detail": "Provider returned error",
+      "ms": 1174,
+      "ctx": 1048576,
+      "tools": false
+    },
+    {
+      "id": "google/lyria-3-clip-preview",
+      "status": 400,
+      "verdict": "HTTP 400",
+      "detail": "Provider returned error",
+      "ms": 1075,
+      "ctx": 1048576,
+      "tools": false
+    },
+    {
+      "id": "openrouter/free",
+      "status": 200,
+      "verdict": "WORKS",
+      "detail": "(empty)",
+      "ms": 503,
+      "ctx": 200000,
+      "tools": true
+    }
+  ]
+}
