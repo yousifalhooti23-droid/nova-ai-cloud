@@ -139,7 +139,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           projectPath: apps/desktop
-          args: --bundles nsis,portable --target x86_64-pc-windows-msvc
+          args: --bundles nsis --target x86_64-pc-windows-msvc
 
       - name: rename to the promised file names + verify bundle contents
         shell: pwsh
