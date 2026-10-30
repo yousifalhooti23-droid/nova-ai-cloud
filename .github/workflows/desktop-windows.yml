@@ -201,16 +201,21 @@ jobs:
                                     "HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*" -ErrorAction SilentlyContinue |
                    Where-Object { $_.DisplayName -like "NOVA AI Cloud*" } | Select-Object -First 1
           if (-not $entry) { throw "NOVA AI Cloud not found in Add/Remove Programs registry" }
-          $loc = $entry.InstallLocation.TrimEnd('\')
+          $loc = $entry.InstallLocation.Trim().Trim('"').TrimEnd('\')
           Write-Host "install location: $loc"
           Write-Host "display version : $($entry.DisplayVersion)"
           Write-Host "uninstall string: $($entry.UninstallString)"
 
           Write-Host "== required installed files =="
-          foreach ($f in @("nova-server.exe", "sidecar\nova-server.exe")) {
-            if (-not (Test-Path (Join-Path $loc $f))) { throw "installed file missing: $f" }
-            Write-Host "  ✅ $f"
+          $scRel = $null
+          foreach ($c in @("sidecar\nova-server.exe", "nova-server.exe")) {
+            if (Test-Path (Join-Path $loc $c)) { $scRel = $c; break }
           }
+          if (-not $scRel) {
+            Get-ChildItem $loc -Recurse -Depth 2 -ErrorAction SilentlyContinue | ForEach-Object { Write-Host "   found: $($_.FullName)" }
+            throw "installed sidecar (nova-server.exe) not found under $loc"
+          }
+          Write-Host "  ✅ sidecar installed at: $scRel"
 
           Write-Host "== shortcuts (desktop + start menu) =="
           $desktopLnk = Join-Path $env:USERPROFILE "Desktop\NOVA AI Cloud.lnk"
@@ -223,7 +228,7 @@ jobs:
 
           Write-Host "== sidecar runs on Windows (health) =="
           $env:PORT = "8912"; $env:HOST = "127.0.0.1"
-          $sc = Start-Process -FilePath (Join-Path $loc "sidecar\nova-server.exe") -PassThru
+          $sc = Start-Process -FilePath (Join-Path $loc $scRel) -PassThru
           $healthy = $false
           for ($i = 0; $i -lt 40; $i++) {
             Start-Sleep -Milliseconds 500
@@ -257,10 +262,14 @@ jobs:
           Write-Host "  ✅ desktop app runs and owns its backend"
 
           Write-Host "== uninstall =="
-          $un = $entry.UninstallString -replace '"', ''
-          Start-Process -FilePath $un -ArgumentList "/S" -Wait
+          $unRaw = $entry.UninstallString
+          if ($unRaw -match '^"([^"]+)"\s*(.*)$') { $unExe = $Matches[1]; $unExtra = $Matches[2] } else { $unExe = $unRaw; $unExtra = "" }
+          $unArgs = @("/S"); if ($unExtra) { $unArgs = @($unExtra, "/S") }
+          Write-Host "uninstall exe: $unExe"
+          Start-Process -FilePath $unExe -ArgumentList $unArgs -Wait
           Start-Sleep -Seconds 3
-          if (Test-Path (Join-Path $loc "nova-server.exe")) { throw "uninstall left files behind in $loc" }
+          if (Test-Path (Join-Path $loc $scRel)) { throw "uninstall left the sidecar behind in $loc" }
+          if (Test-Path (Join-Path $loc "sidecar")) { throw "uninstall left the sidecar folder behind in $loc" }
           if (Test-Path $desktopLnk) { throw "uninstall left the desktop shortcut" }
           if (Test-Path $startDir) { throw "uninstall left the start menu folder" }
           Write-Host "  ✅ uninstaller removed files and shortcuts"
