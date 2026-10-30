@@ -17,8 +17,8 @@
   "bundle": {
     "active": true,
     "targets": [
-      "nsis",
-      "portable"
+      "nsis"
+     
     ],
     "icon": [
       "icons/32x32.png",
