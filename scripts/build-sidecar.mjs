@@ -132,7 +132,7 @@ if (SKIP_PKG) {
   const out = path.join(OUT_DIR, EXE_NAME);
    execFileSync(process.platform === 'win32' ? 'npx.cmd' : 'npx', ['--yes', '@yao-pkg/pkg', BUNDLE, '--targets', TARGET, '--output', out], {
     stdio: 'inherit',
-    cwd: root,
+    cwd: root, shell: true,
   });
   const size = statSync(out).size;
   console.log(`✅ packaged → ${path.relative(root, out)} (${(size / 1024 / 1024).toFixed(1)} MB)`);
