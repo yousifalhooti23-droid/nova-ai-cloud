@@ -130,7 +130,7 @@ if (SKIP_PKG) {
   console.log('⏭  --skip-pkg: left the CJS bundle un-packaged');
 } else {
   const out = path.join(OUT_DIR, EXE_NAME);
-  execFileSync('npx', ['--yes', '@yao-pkg/pkg', BUNDLE, '--targets', TARGET, '--output', out], {
+   execFileSync(process.platform === 'win32' ? 'npx.cmd' : 'npx', ['--yes', '@yao-pkg/pkg', BUNDLE, '--targets', TARGET, '--output', out], {
     stdio: 'inherit',
     cwd: root,
   });
