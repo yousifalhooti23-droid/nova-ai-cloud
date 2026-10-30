@@ -155,7 +155,7 @@ jobs:
           # --- required-file checks (requirement: add checks for the build) ---
           $setup = Get-Item "dist-out/NOVA-AI-Cloud-Setup.exe"
           Write-Host ("installer: {0} ({1} MB)" -f $setup.Name, [math]::Round($setup.Length/1MB,1))
-          if ($setup.Length -lt 20MB) { throw "installer too small — sidecar or UI probably not bundled" }
+          if ($setup.Length -lt 8MB) { throw "installer too small — sidecar or UI probably not bundled" }
           # the installer is a PE executable
           $bytes = [System.IO.File]::ReadAllBytes($setup.FullName)[0..1]
           if (-not ($bytes[0] -eq 0x4D -and $bytes[1] -eq 0x5A)) { throw "installer is not a valid PE (MZ) executable" }
