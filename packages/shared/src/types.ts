@@ -275,3 +275,25 @@ export interface UsageRecord {
 export interface ProviderNotConfiguredError extends Error {
   code: 'provider_not_configured';
 }
+
+/* ----------------------------------------------------------- auth & quotas */
+
+export type UserRole = 'owner' | 'user';
+
+export interface QuotaStatus {
+  unlimited: boolean;
+  used: number;
+  limit: number;
+  remaining: number | null;
+  locked: boolean;
+  lockedUntil: ISODate | null;
+}
+
+export interface AuthUser {
+  id: ID;
+  email: string;
+  displayName: string;
+  role: UserRole;
+  quota: QuotaStatus;
+  createdAt: ISODate;
+}

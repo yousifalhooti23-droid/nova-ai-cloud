@@ -24,6 +24,9 @@ export function registerStudioRoutes(app: Hono<AppEnv>) {
     if (!req || typeof req.prompt !== 'string' || !req.prompt.trim()) {
       throw badRequest('prompt is required', 'bad_prompt');
     }
+    if (d.currentUser) {
+      await d.auth.consumeQuota(d.currentUser.id, 2);
+    }
     const res = await generateCloudImage(d, {
       prompt: req.prompt.trim(),
       width: clampDim(req.width ?? 1024),
@@ -40,6 +43,9 @@ export function registerStudioRoutes(app: Hono<AppEnv>) {
     const req = (await c.req.json().catch(() => null)) as StudioVideoRequest | null;
     if (!req || typeof req.prompt !== 'string' || !req.prompt.trim()) {
       throw badRequest('prompt is required', 'bad_prompt');
+    }
+    if (d.currentUser) {
+      await d.auth.consumeQuota(d.currentUser.id, 4);
     }
     const res = await generateCloudVideo(d, {
       prompt: req.prompt.trim(),

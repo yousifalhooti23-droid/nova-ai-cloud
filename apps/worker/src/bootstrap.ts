@@ -7,6 +7,8 @@ import { createSandbox } from './sandbox/index.js';
 import { D1BlobStore, FileBlobStore, MemoryBlobStore, R2BlobStore, type BlobStore } from './storage/blob.js';
 import { D1Store } from './storage/d1-store.js';
 import { JsonStore } from './storage/json-store.js';
+import { D1AuthRepo, JsonAuthRepo, type AuthRepo } from './auth/repo.js';
+import { AuthService } from './auth/service.js';
 import type { AppDeps } from './context.js';
 import type { Store } from './storage/types.js';
 
@@ -67,6 +69,18 @@ export async function bootstrap(opts: BootstrapOptions): Promise<{ app: ReturnTy
   const sandbox = opts.sandbox ?? createSandbox(cfg, opts.env);
   const git = new GitService(store);
 
+  const authRepo: AuthRepo = opts.env.DB
+    ? new D1AuthRepo(opts.env.DB as never)
+    : new JsonAuthRepo(cfg.runtime === 'node' && !opts.store ? `${cfg.dataDir}/nova-auth.json` : undefined);
+  await authRepo.init();
+  const auth = new AuthService(authRepo, {
+    defaultDailyQuota: cfg.userDailyQuotaLimit,
+    ownerEmail: cfg.ownerEmail,
+    ownerInitialPassword: cfg.ownerInitialPassword,
+    ownerDisplayName: cfg.ownerDisplayName,
+  });
+  await auth.bootstrapOwner(store);
+
   /**
    * Probe the Workers AI binding once at startup.
    *
@@ -90,7 +104,7 @@ export async function bootstrap(opts: BootstrapOptions): Promise<{ app: ReturnTy
     }
   }
 
-  const deps: AppDeps = { cfg, env: opts.env, store, blob, router, sandbox, secrets, log, git };
+  const deps: AppDeps = { cfg, env: opts.env, store, blob, router, sandbox, secrets, log, git, auth };
   const app = createApp(deps);
 
   log.info('bootstrap', {

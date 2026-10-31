@@ -131,6 +131,9 @@ const HOST = process.env.HOST ?? '127.0.0.1';
 if (process.env.NOVA_DATA_DIR === undefined) process.env.NOVA_DATA_DIR = path.join(userDir, 'nova-data');
 if (process.env.NOVA_ENV_FILE === undefined) process.env.NOVA_ENV_FILE = path.join(userDir, 'nova.env');
 if (process.env.NOVA_SANDBOX === undefined) process.env.NOVA_SANDBOX = 'worker';
+if (process.env.NOVA_REQUIRE_AUTH === undefined) process.env.NOVA_REQUIRE_AUTH = 'true';
+if (process.env.NOVA_OWNER_EMAIL === undefined) process.env.NOVA_OWNER_EMAIL = 'yousifalhooti23@gmail.com';
+if (process.env.NOVA_OWNER_NAME === undefined) process.env.NOVA_OWNER_NAME = 'Yousif';
 
 /**
  * Zero-capability V8 VM isolate for Desktop JavaScript execution & verification.

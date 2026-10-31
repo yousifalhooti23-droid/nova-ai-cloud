@@ -25,6 +25,10 @@ export function registerSandboxRoutes(app: Hono<AppEnv>) {
     if ((req.command?.length ?? 0) > 4000) throw badRequest('command is too long', 'too_long');
     if ((req.code?.length ?? 0) > 500_000) throw badRequest('code is too large', 'too_large');
 
+    if (d.currentUser) {
+      await d.auth.consumeQuota(d.currentUser.id, 1);
+    }
+
     // Defence in depth: the agent's run_command tool already classifies commands,
     // and a direct API call must not get a laxer path to the sandbox.
     if (req.command) {

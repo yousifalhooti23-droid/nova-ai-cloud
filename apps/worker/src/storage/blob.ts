@@ -145,9 +145,14 @@ export class FileBlobStore implements BlobStore {
     return { fs: this.fs!, path: this.path! };
   }
   private resolve(key: string) {
-    const p = this.path!.join(this.dir, key.replace(/^\/+/, ''));
-    if (!p.startsWith(this.dir)) throw new Error('blob key escapes storage root');
-    return p;
+    const root = this.path!.resolve(this.dir);
+    const cleaned = key.replace(/^[\\/]+/, '');
+    const target = this.path!.resolve(root, cleaned);
+    const rel = this.path!.relative(root, target);
+    if (!rel || rel.startsWith('..') || this.path!.isAbsolute(rel)) {
+      throw new Error('blob key escapes storage root');
+    }
+    return target;
   }
   async put(key: string, data: ArrayBuffer | Uint8Array | string, opts?: { contentType?: string }) {
     const { fs, path } = await this.load();

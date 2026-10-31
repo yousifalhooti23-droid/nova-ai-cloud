@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
-  Code2, FolderKanban, Globe, MessageSquare, PanelLeft, PanelLeftClose, Pencil, Plus,
-  Settings, Trash2, Sparkles, Bot,
+  Code2, Crown, FolderKanban, Globe, LogOut, MessageSquare, PanelLeft, PanelLeftClose, Pencil, Plus,
+  Settings, Trash2, Sparkles, Bot, ShieldCheck,
 } from 'lucide-react';
 import { useI18n } from '@/i18n';
 import { cn } from '@/lib/cn';
@@ -21,6 +21,9 @@ export function Sidebar() {
   const health = useAppStore((s) => s.health);
   const offline = useAppStore((s) => s.offline);
   const setLocale = useAppStore((s) => s.setLocale);
+  const authUser = useAppStore((s) => s.authUser);
+  const logout = useAppStore((s) => s.logout);
+  const isAr = locale === 'ar';
 
   const readyProviders = useMemo(
     () => (health?.providers ?? []).filter((p) => p.status === 'ready'),
@@ -77,6 +80,84 @@ export function Sidebar() {
 
       {/* Footer */}
       <div className="border-t border-line p-2">
+        {authUser && !collapsed ? (
+          <div className="mb-2 rounded-xl border border-line bg-bg/60 p-2.5">
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => openSettings(true, 'account')}
+                className="flex min-w-0 flex-1 items-center gap-2 text-start"
+                title={isAr ? 'حسابي والأمان' : 'Account & Security'}
+              >
+                <div
+                  className={cn(
+                    'grid h-7 w-7 shrink-0 place-items-center rounded-lg text-[11px] font-bold',
+                    authUser.role === 'owner'
+                      ? 'bg-amber-500/20 text-amber-300 ring-1 ring-amber-400/35'
+                      : 'bg-accent/15 text-accent',
+                  )}
+                >
+                  {authUser.role === 'owner' ? <Crown size={14} /> : authUser.displayName.slice(0, 1).toUpperCase()}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-[12px] font-semibold text-text">{authUser.displayName}</p>
+                  <p className="truncate text-[10px] text-dim">{authUser.email}</p>
+                </div>
+              </button>
+              <IconButton
+                label={isAr ? 'تسجيل الخروج' : 'Sign Out'}
+                onClick={() => void logout()}
+                className="shrink-0 text-dim hover:text-danger"
+              >
+                <LogOut size={13} />
+              </IconButton>
+            </div>
+
+            {authUser.role === 'owner' ? (
+              <div className="mt-2 flex items-center justify-between rounded-lg border border-amber-400/25 bg-amber-500/10 px-2 py-1 text-[10.5px] font-medium text-amber-300">
+                <span>{isAr ? '👑 حساب المالك' : '👑 Owner Account'}</span>
+                <span>{isAr ? 'غير محدود (∞)' : 'Unlimited (∞)'}</span>
+              </div>
+            ) : (
+              <div className="mt-2">
+                <div className="mb-1 flex items-center justify-between text-[10.5px]">
+                  <span className="text-muted">{isAr ? 'الاستهلاك اليومي' : 'Daily Quota'}</span>
+                  <span
+                    className={cn(
+                      'font-mono font-semibold',
+                      authUser.quota.locked ? 'text-danger' : 'text-text',
+                    )}
+                  >
+                    {authUser.quota.used} / {authUser.quota.limit}
+                  </span>
+                </div>
+                <div className="h-1.5 w-full overflow-hidden rounded-full bg-elevated">
+                  <div
+                    className={cn(
+                      'h-full rounded-full transition-all duration-300',
+                      authUser.quota.locked
+                        ? 'bg-danger'
+                        : authUser.quota.used / Math.max(1, authUser.quota.limit) >= 0.8
+                          ? 'bg-amber-400'
+                          : 'bg-emerald-400',
+                    )}
+                    style={{
+                      width: `${Math.min(100, Math.round((authUser.quota.used / Math.max(1, authUser.quota.limit)) * 100))}%`,
+                    }}
+                  />
+                </div>
+                {authUser.quota.locked ? (
+                  <p className="mt-1.5 text-[10px] leading-snug text-danger">
+                    {isAr
+                      ? `⛔ خلاص ما فيه رصيد — يتجدد بعد أسبوع (${authUser.quota.lockedUntil?.slice(0, 10) ?? ''})`
+                      : `⛔ Limit reached — renews in 1 week (${authUser.quota.lockedUntil?.slice(0, 10) ?? ''})`}
+                  </p>
+                ) : null}
+              </div>
+            )}
+          </div>
+        ) : null}
+
         {!collapsed && (
           <button
             type="button"
@@ -98,6 +179,15 @@ export function Sidebar() {
           <IconButton label={t('nav.settings')} onClick={() => openSettings(true)} className={cn(collapsed && 'w-full')}>
             <Settings size={15} />
           </IconButton>
+          {authUser ? (
+            <IconButton
+              label={isAr ? 'حسابي والأمان' : 'Account & Security'}
+              onClick={() => openSettings(true, 'account')}
+              className={cn(collapsed && 'w-full')}
+            >
+              <ShieldCheck size={15} />
+            </IconButton>
+          ) : null}
           <IconButton
             label={t('settings.language')}
             onClick={() => setLocale(locale === 'ar' ? 'en' : 'ar')}
@@ -105,6 +195,15 @@ export function Sidebar() {
           >
             <Globe size={15} />
           </IconButton>
+          {authUser && collapsed ? (
+            <IconButton
+              label={isAr ? 'تسجيل الخروج' : 'Sign Out'}
+              onClick={() => void logout()}
+              className="w-full text-dim hover:text-danger"
+            >
+              <LogOut size={15} />
+            </IconButton>
+          ) : null}
           {!collapsed && (
             <span className="ms-auto rounded-md border border-line-strong bg-elevated px-1.5 py-0.5 font-mono text-[10px] text-dim">
               {locale.toUpperCase()}

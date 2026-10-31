@@ -33,6 +33,18 @@ export function registerChatRoutes(app: Hono<AppEnv>) {
     if (!effectiveMessage) throw badRequest('message is required', 'bad_message');
     if (effectiveMessage.length > 200_000) throw badRequest('message is too long (max 200,000 characters)', 'too_long');
 
+    const precomputedStudioIntent = !hasAttachments
+      ? detectStudioIntent(effectiveMessage, req.studioMode)
+      : req.studioMode === 'website'
+        ? 'website'
+        : null;
+
+    // Enforce per-user daily quota (and 7-day lockout on exhaustion) before mutating DB or invoking AI.
+    if (d.currentUser) {
+      const quotaCost = precomputedStudioIntent === 'video' ? 4 : precomputedStudioIntent === 'image' ? 2 : 1;
+      await d.auth.consumeQuota(d.currentUser.id, quotaCost);
+    }
+
     // Resolve (or create) the conversation before streaming starts.
     let conversation = req.conversationId ? await d.store.getConversation(req.conversationId) : null;
     if (req.conversationId && !conversation) throw badRequest(`conversation ${req.conversationId} not found`, 'not_found');

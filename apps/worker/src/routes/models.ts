@@ -1,6 +1,6 @@
 import type { ModelsRefreshResponse, ModelsResponse, ProviderId } from '@nova/shared';
 import { MODEL_CLASSES, PROVIDER_META, WORKERS_AI_VERIFIED_AT } from '@nova/shared';
-import { badRequest } from '../lib/errors.js';
+import { badRequest, forbidden } from '../lib/errors.js';
 import type { AppEnv } from '../context.js';
 import type { Hono } from 'hono';
 
@@ -31,6 +31,9 @@ export function registerModelRoutes(app: Hono<AppEnv>) {
   /** Re-read a provider's live model list (public for OpenRouter, key for others). */
   app.post('/api/models/refresh', async (c) => {
     const d = c.get('deps');
+    if (d.cfg.userAuthEnabled && d.currentUser?.role !== 'owner') {
+      throw forbidden('صلاحية مالك المنصة مطلوبة لتحديث قائمة المزودين.', 'owner_only');
+    }
     const provider = (await c.req.json().catch(() => ({}))) as { provider?: string };
     const id = (provider.provider ?? 'openrouter') as ProviderId;
     if (!['openrouter', 'groq', 'custom'].includes(id)) throw badRequest(`Live refresh is not supported for "${id}".`, 'unsupported_provider');
@@ -54,6 +57,9 @@ export function registerModelRoutes(app: Hono<AppEnv>) {
     const body = (await c.req.json().catch(() => ({}))) as { modelId?: string };
     if (!body.modelId || typeof body.modelId !== 'string') throw badRequest('modelId is required', 'bad_request');
     if (body.modelId.length > 200) throw badRequest('modelId is too long', 'bad_request');
+    if (d.currentUser) {
+      await d.auth.consumeQuota(d.currentUser.id, 1);
+    }
     return c.json(await d.router.probe(body.modelId));
   });
 }

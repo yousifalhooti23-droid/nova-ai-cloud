@@ -6,7 +6,9 @@
  * in browser code and no backend URL is configured client-side.
  */
 import type {
-  AgentRun, AgentRunDetailResponse, AgentRunRequest, ApplyAllResponse, AttachmentRef,
+  AdminUsersResponse, AdminUserSummary, AgentRun, AgentRunDetailResponse, AgentRunRequest,
+  ApplyAllResponse, AttachmentRef, AuthChangePasswordRequest, AuthLoginRequest,
+  AuthRegisterRequest, AuthSessionResponse,
   ChangeActionRequest, ChatRequest, Commit, CommitRequest, Conversation, ConversationCreateRequest,
   ConversationPatchRequest, FileChange, FileResponse, FileWriteRequest, HealthResponse,
   LocalProviderKeysResponse, LocalProviderKeyUpdateRequest,
@@ -18,6 +20,7 @@ import type {
 import { Endpoints } from '@nova/shared';
 
 const ACCESS_TOKEN_KEY = 'nova.access.token';
+const SESSION_TOKEN_KEY = 'nova.session.token';
 
 export function getStoredAccessToken(): string {
   try {
@@ -37,6 +40,24 @@ export function setStoredAccessToken(token: string) {
   }
 }
 
+export function getStoredSessionToken(): string {
+  try {
+    return localStorage.getItem(SESSION_TOKEN_KEY) ?? '';
+  } catch {
+    return '';
+  }
+}
+
+export function setStoredSessionToken(token: string) {
+  try {
+    const clean = token.trim();
+    if (clean) localStorage.setItem(SESSION_TOKEN_KEY, clean);
+    else localStorage.removeItem(SESSION_TOKEN_KEY);
+  } catch {
+    /* ignore storage errors */
+  }
+}
+
 function authHeaders(extra?: HeadersInit): Record<string, string> {
   const out: Record<string, string> = {};
   if (extra) {
@@ -44,6 +65,10 @@ function authHeaders(extra?: HeadersInit): Record<string, string> {
   }
   const tok = getStoredAccessToken();
   if (tok) out['x-nova-token'] = tok;
+  const sess = getStoredSessionToken();
+  if (sess && !out.authorization && !out.Authorization) {
+    out.authorization = `Bearer ${sess}`;
+  }
   return out;
 }
 
@@ -140,8 +165,17 @@ export interface ProviderKeysResponse {
 }
 
 export const api = {
-  /* ---- health & models ---- */
+  /* ---- health, auth & models ---- */
   health: () => json<HealthResponse>(Endpoints.health, 'GET'),
+  authMe: () => json<AuthSessionResponse>(Endpoints.authMe, 'GET'),
+  authLogin: (body: AuthLoginRequest) => json<AuthSessionResponse>(Endpoints.authLogin, 'POST', body),
+  authRegister: (body: AuthRegisterRequest) => json<AuthSessionResponse>(Endpoints.authRegister, 'POST', body),
+  authLogout: () => json<{ ok: boolean }>(Endpoints.authLogout, 'POST', {}),
+  authChangePassword: (body: AuthChangePasswordRequest) =>
+    json<{ ok: boolean }>(Endpoints.authChangePassword, 'POST', body),
+  adminUsers: () => json<AdminUsersResponse>(Endpoints.adminUsers, 'GET'),
+  adminUserQuota: (id: string, body: { action: 'reset' | 'lock_week' | 'set_limit'; limit?: number }) =>
+    json<{ user: AdminUserSummary }>(Endpoints.adminUserQuota(id), 'POST', body),
   models: () => json<ModelsResponse>(Endpoints.models, 'GET'),
   refreshModels: (provider?: ProviderId) =>
     json<ModelsRefreshResponse[]>(Endpoints.modelsRefresh, 'POST', provider ? { provider } : {}),

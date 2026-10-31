@@ -4,15 +4,22 @@
  * breaking at runtime.
  */
 import type {
-  AgentRun, AttachmentRef, ChangeStatus, Commit, Conversation, FileChange, ISODate,
+  AgentRun, AttachmentRef, AuthUser, ChangeStatus, Commit, Conversation, FileChange, ISODate,
   MemoryEntry, MemoryScope, ModelClass, ModelInfo, Project, ProjectFile, ProviderInfo,
-  ProviderId, Task, UsageRecord,
+  ProviderId, QuotaStatus, Task, UsageRecord,
 } from './types.js';
 
 export const API_PREFIX = '/api';
 
 export const Endpoints = {
   health: `${API_PREFIX}/health`,
+  authMe: `${API_PREFIX}/auth/me`,
+  authLogin: `${API_PREFIX}/auth/login`,
+  authRegister: `${API_PREFIX}/auth/register`,
+  authLogout: `${API_PREFIX}/auth/logout`,
+  authChangePassword: `${API_PREFIX}/auth/change-password`,
+  adminUsers: `${API_PREFIX}/admin/users`,
+  adminUserQuota: (id: string) => `${API_PREFIX}/admin/users/${id}/quota`,
   models: `${API_PREFIX}/models`,
   modelsRefresh: `${API_PREFIX}/models/refresh`,
   chat: `${API_PREFIX}/chat`,
@@ -55,11 +62,50 @@ export interface HealthResponse {
   version: string;
   runtime: 'workers' | 'node';
   authProtected?: boolean;
+  userAuthEnabled?: boolean;
   store: { kind: 'd1' | 'json'; ready: boolean; detail: string };
   blob: { kind: 'r2' | 'd1' | 'file' | 'memory'; ready: boolean };
   sandbox: { kind: string; ready: boolean; detail: string };
   providers: ProviderInfo[];
   time: ISODate;
+}
+
+/* ------------------------------------------------------------------ auth */
+
+export interface AuthLoginRequest {
+  email: string;
+  password: string;
+}
+
+export interface AuthRegisterRequest {
+  email: string;
+  password: string;
+  displayName: string;
+}
+
+export interface AuthChangePasswordRequest {
+  currentPassword: string;
+  newPassword: string;
+}
+
+export interface AuthSessionResponse {
+  authenticated: boolean;
+  user: AuthUser | null;
+  token?: string;
+}
+
+export interface AdminUserSummary {
+  id: string;
+  email: string;
+  displayName: string;
+  role: 'owner' | 'user';
+  quota: QuotaStatus;
+  createdAt: ISODate;
+  lastLoginAt: ISODate;
+}
+
+export interface AdminUsersResponse {
+  users: AdminUserSummary[];
 }
 
 /* --------------------------------------------------------------- models */

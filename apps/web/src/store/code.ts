@@ -132,6 +132,7 @@ interface CodeState {
   clearTerminal: () => void;
   refreshCommits: () => Promise<void>;
   reloadOpenFiles: () => Promise<void>;
+  resetSession: () => void;
 }
 
 export const useCodeStore = create<CodeState>((set, get) => ({
@@ -590,6 +591,28 @@ export const useCodeStore = create<CodeState>((set, get) => ({
 
   clearTerminal() {
     set({ terminal: [] });
+  },
+
+  resetSession() {
+    agentHandle?.abort();
+    agentHandle = null;
+    set({
+      projects: [],
+      activeProjectId: null,
+      files: [],
+      openFiles: {},
+      activePath: null,
+      changes: [],
+      tasks: [],
+      commits: [],
+      git: null,
+      memory: [],
+      search: { query: '', running: false, result: null },
+      terminal: [],
+      agent: initialAgent,
+      loading: false,
+      lastError: null,
+    });
   },
 
   /* helpers that need a fresh read of several slices */

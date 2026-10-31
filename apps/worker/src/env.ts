@@ -39,6 +39,16 @@ export interface NovaConfig {
   adminToken?: string;
   /** Optional shared secret protecting /api/* on public cloud deployments. */
   accessToken?: string;
+  /** Enforce per-user registration/login, strict tenant isolation, and daily quotas. */
+  userAuthEnabled: boolean;
+  /** Platform owner email (unlimited quota + admin privileges). */
+  ownerEmail?: string;
+  /** Optional initial owner password secret used once to pre-seed the owner account. */
+  ownerInitialPassword?: string;
+  /** Display name for the seeded owner account. */
+  ownerDisplayName?: string;
+  /** Daily quota limit for regular users (default: 20 units/day; 7-day lockout on exhaustion). */
+  userDailyQuotaLimit: number;
   /** Writable env file path in local/desktop Node mode for UI key persistence. */
   envFilePath?: string;
   sandbox: SandboxConfig;
@@ -145,6 +155,11 @@ export function loadConfig(env: RawEnv): NovaConfig {
     allowRuntimeKeys: bool(read(env, 'NOVA_ALLOW_RUNTIME_KEYS'), false),
     adminToken: read(env, 'NOVA_ADMIN_TOKEN'),
     accessToken: read(env, 'NOVA_ACCESS_TOKEN'),
+    userAuthEnabled: bool(read(env, 'NOVA_REQUIRE_AUTH'), false),
+    ownerEmail: read(env, 'NOVA_OWNER_EMAIL'),
+    ownerInitialPassword: read(env, 'NOVA_OWNER_INITIAL_PASSWORD'),
+    ownerDisplayName: read(env, 'NOVA_OWNER_NAME'),
+    userDailyQuotaLimit: Math.max(1, Number(read(env, 'NOVA_USER_QUOTA_LIMIT') ?? 20)),
     envFilePath: read(env, 'NOVA_ENV_FILE'),
     sandbox: {
       kind: sandboxKind,

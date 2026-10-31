@@ -298,11 +298,12 @@ export function registerProjectRoutes(app: Hono<AppEnv>) {
   });
 }
 
-function githubSync(d: { env: Record<string, unknown>; store: import('../storage/types.js').Store }) {
+function githubSync(d: import('../context.js').AppDeps) {
+  const canUseServerGithub = !d.cfg.userAuthEnabled || d.currentUser?.role === 'owner';
   const env = d.env as Record<string, unknown>;
   return new GitHubSync(d.store, {
-    token: typeof env.GITHUB_TOKEN === 'string' ? env.GITHUB_TOKEN : undefined,
-    repo: typeof env.GITHUB_REPO === 'string' ? env.GITHUB_REPO : undefined,
-    baseUrl: typeof env.GITHUB_BASE_URL === 'string' ? env.GITHUB_BASE_URL : undefined,
+    token: canUseServerGithub && typeof env.GITHUB_TOKEN === 'string' ? env.GITHUB_TOKEN : undefined,
+    repo: canUseServerGithub && typeof env.GITHUB_REPO === 'string' ? env.GITHUB_REPO : undefined,
+    baseUrl: canUseServerGithub && typeof env.GITHUB_BASE_URL === 'string' ? env.GITHUB_BASE_URL : undefined,
   });
 }

@@ -125,7 +125,7 @@ try {
   run(sandboxWrangler, ['deploy'], sandboxDir);
 
   // 6. Push optional secrets if supplied in environment
-  for (const secretName of ['OPENROUTER_API_KEY', 'NOVA_ACCESS_TOKEN']) {
+  for (const secretName of ['OPENROUTER_API_KEY', 'NOVA_ACCESS_TOKEN', 'NOVA_OWNER_INITIAL_PASSWORD']) {
     const val = process.env[secretName]?.trim();
     if (val) {
       console.log(`🔑 Configuring secret ${secretName}...`);

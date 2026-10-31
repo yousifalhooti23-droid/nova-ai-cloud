@@ -45,6 +45,13 @@ export class ModelRouter {
     this.adapters = adapters ?? buildAdapters(env, store, []);
   }
 
+  /** Return a per-request view bound to a user-scoped Store while sharing cached adapters. */
+  withStore(scopedStore: Store): ModelRouter {
+    const view = Object.create(this) as ModelRouter;
+    view.store = scopedStore;
+    return view;
+  }
+
   /** Effective config, with any runtime-injected keys merged in. */
   private config(): NovaConfig {
     return withRuntimeSecrets(this.cfg, this.secrets);

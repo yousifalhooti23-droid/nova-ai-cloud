@@ -22,6 +22,10 @@ export function registerAgentRoutes(app: Hono<AppEnv>) {
     if (!project) throw notFound(`project ${req.projectId} not found`);
     if (req.prompt.length > 100_000) throw badRequest('prompt is too long', 'too_long');
 
+    if (d.currentUser) {
+      await d.auth.consumeQuota(d.currentUser.id, 2);
+    }
+
     const settings = await d.store.getSettings();
     const autoApply = req.autoApply ?? settings.agent.autoApply;
     const allowTerminal = req.allowTerminal ?? settings.agent.allowTerminal;

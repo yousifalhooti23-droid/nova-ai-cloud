@@ -10,6 +10,7 @@ export function registerHealthRoutes(app: Hono<AppEnv>, deps: AppDeps) {
       version: deps.cfg.version,
       runtime: deps.cfg.runtime,
       authProtected: Boolean(deps.cfg.accessToken),
+      userAuthEnabled: deps.cfg.userAuthEnabled,
       store: {
         kind: deps.store.kind,
         ready: true,

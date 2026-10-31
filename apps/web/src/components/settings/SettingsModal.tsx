@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
-import type { LocalProviderKeysResponse, ModelClass, ModelInfo, ProviderId } from '@nova/shared';
+import type { AdminUserSummary, LocalProviderKeysResponse, ModelClass, ModelInfo, ProviderId } from '@nova/shared';
 import {
-  Activity, Bot, Check, Cpu, Database, ExternalLink, Globe, Info, KeyRound, RefreshCw, ShieldCheck, TerminalSquare, Trash2,
+  Activity, Bot, Check, Cpu, Crown, Database, ExternalLink, Globe, Info, KeyRound, Lock, LogOut, RefreshCw, ShieldCheck, TerminalSquare, Trash2, Users,
 } from 'lucide-react';
 import { LOCALES, useI18n, type Locale } from '@/i18n';
 import { cn } from '@/lib/cn';
@@ -20,12 +20,18 @@ const PROVIDER_ORDER: ProviderId[] = ['workers-ai', 'openrouter', 'groq', 'custo
 const NO_MODELS: ModelInfo[] = [];
 
 export function SettingsModal() {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
+  const isAr = locale === 'ar';
   const open = useAppStore((s) => s.settingsOpen);
   const tab = useAppStore((s) => s.settingsTab);
   const openSettings = useAppStore((s) => s.openSettings);
+  const authUser = useAppStore((s) => s.authUser);
+  const health = useAppStore((s) => s.health);
 
   if (!open) return null;
+
+  const canManageProviders = !health?.userAuthEnabled || authUser?.role === 'owner';
+  const activeTab = tab === 'providers' && !canManageProviders ? 'general' : tab;
 
   return (
     <Modal
@@ -33,21 +39,32 @@ export function SettingsModal() {
       onClose={() => openSettings(false)}
       title={t('settings.title')}
       subtitle={t('app.tagline')}
-      width={760}
+      width={780}
       footer={<Button variant="ghost" onClick={() => openSettings(false)}>{t('common.close')}</Button>}
     >
       <div className="flex gap-4">
-        <nav className="flex w-[150px] shrink-0 flex-col gap-0.5">
-          <TabButton active={tab === 'general'} onClick={() => openSettings(true, 'general')} icon={<Globe size={13} />} label={t('settings.general')} />
-          <TabButton active={tab === 'providers'} onClick={() => openSettings(true, 'providers')} icon={<Cpu size={13} />} label={t('settings.providers')} />
-          <TabButton active={tab === 'agent'} onClick={() => openSettings(true, 'agent')} icon={<Bot size={13} />} label={t('settings.agent')} />
-          <TabButton active={tab === 'storage'} onClick={() => openSettings(true, 'storage')} icon={<Database size={13} />} label={t('settings.storage')} />
+        <nav className="flex w-[160px] shrink-0 flex-col gap-0.5">
+          <TabButton active={activeTab === 'general'} onClick={() => openSettings(true, 'general')} icon={<Globe size={13} />} label={t('settings.general')} />
+          {authUser ? (
+            <TabButton
+              active={activeTab === 'account'}
+              onClick={() => openSettings(true, 'account')}
+              icon={<ShieldCheck size={13} />}
+              label={isAr ? 'حسابي والأمان' : 'Account & Security'}
+            />
+          ) : null}
+          {canManageProviders ? (
+            <TabButton active={activeTab === 'providers'} onClick={() => openSettings(true, 'providers')} icon={<Cpu size={13} />} label={t('settings.providers')} />
+          ) : null}
+          <TabButton active={activeTab === 'agent'} onClick={() => openSettings(true, 'agent')} icon={<Bot size={13} />} label={t('settings.agent')} />
+          <TabButton active={activeTab === 'storage'} onClick={() => openSettings(true, 'storage')} icon={<Database size={13} />} label={t('settings.storage')} />
         </nav>
         <div className="min-w-0 flex-1">
-          {tab === 'general' ? <GeneralTab /> : null}
-          {tab === 'providers' ? <ProvidersTab /> : null}
-          {tab === 'agent' ? <AgentTab /> : null}
-          {tab === 'storage' ? <StorageTab /> : null}
+          {activeTab === 'general' ? <GeneralTab /> : null}
+          {activeTab === 'account' && authUser ? <AccountSecurityTab /> : null}
+          {activeTab === 'providers' && canManageProviders ? <ProvidersTab /> : null}
+          {activeTab === 'agent' ? <AgentTab /> : null}
+          {activeTab === 'storage' ? <StorageTab /> : null}
         </div>
       </div>
     </Modal>
@@ -679,6 +696,242 @@ function InfoCard({ icon, label, value, detail, tone }: { icon: React.ReactNode;
         {value}
       </p>
       {detail ? <p className="mt-1 text-[11px] leading-relaxed text-dim">{detail}</p> : null}
+    </div>
+  );
+}
+
+/* ----------------------------------------------------- account & security */
+
+function AccountSecurityTab() {
+  const { locale } = useI18n();
+  const isAr = locale === 'ar';
+  const authUser = useAppStore((s) => s.authUser);
+  const logout = useAppStore((s) => s.logout);
+  const toast = useAppStore((s) => s.toast);
+
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [savingPw, setSavingPw] = useState(false);
+
+  const [users, setUsers] = useState<AdminUserSummary[]>([]);
+  const [loadingUsers, setLoadingUsers] = useState(false);
+
+  const loadAdminUsers = async () => {
+    if (authUser?.role !== 'owner') return;
+    setLoadingUsers(true);
+    try {
+      const res = await api.adminUsers();
+      setUsers(res.users);
+    } catch {
+      /* ignore */
+    } finally {
+      setLoadingUsers(false);
+    }
+  };
+
+  useEffect(() => {
+    void loadAdminUsers();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authUser?.role]);
+
+  if (!authUser) return null;
+
+  const handlePasswordChange = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSavingPw(true);
+    try {
+      await api.authChangePassword({ currentPassword, newPassword });
+      setCurrentPassword('');
+      setNewPassword('');
+      toast({
+        kind: 'success',
+        message: isAr ? 'تم تحديث كلمة المرور وإلغاء الجلسات الأخرى بنجاح.' : 'Password updated and other sessions revoked.',
+      });
+    } catch (err) {
+      toast({ kind: 'error', message: describeApiError(err).message });
+    } finally {
+      setSavingPw(false);
+    }
+  };
+
+  const handleQuotaAction = async (userId: string, action: 'reset' | 'lock_week') => {
+    try {
+      const { user } = await api.adminUserQuota(userId, { action });
+      setUsers((prev) => prev.map((u) => (u.id === user.id ? user : u)));
+      toast({
+        kind: 'success',
+        message:
+          action === 'reset'
+            ? isAr
+              ? 'تم تصفير حد المستخدم وتفعيل رصيده فوراً.'
+              : 'User quota reset.'
+            : isAr
+              ? 'تم إيقاف حد المستخدم لمدة أسبوع.'
+              : 'User locked for 1 week.',
+      });
+    } catch (err) {
+      toast({ kind: 'error', message: describeApiError(err).message });
+    }
+  };
+
+  return (
+    <div className="flex flex-col gap-4">
+      {/* Profile & Quota Card */}
+      <div className="rounded-xl border border-line bg-surface p-3.5">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-2.5">
+            <div
+              className={cn(
+                'grid h-9 w-9 place-items-center rounded-xl text-[13px] font-bold',
+                authUser.role === 'owner'
+                  ? 'bg-amber-500/20 text-amber-300 ring-1 ring-amber-400/35'
+                  : 'bg-accent/15 text-accent',
+              )}
+            >
+              {authUser.role === 'owner' ? <Crown size={17} /> : authUser.displayName.slice(0, 1).toUpperCase()}
+            </div>
+            <div>
+              <p className="text-[13px] font-semibold text-text">{authUser.displayName}</p>
+              <p className="font-mono text-[11px] text-dim">{authUser.email}</p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            {authUser.role === 'owner' ? (
+              <Badge tone="warning">{isAr ? '👑 المالك · غير محدود (∞)' : '👑 Owner · Unlimited (∞)'}</Badge>
+            ) : authUser.quota.locked ? (
+              <Badge tone="danger">{isAr ? '⛔ منتهي (يتجدد بعد أسبوع)' : '⛔ Weekly Lockout'}</Badge>
+            ) : (
+              <Badge tone="success">
+                {isAr
+                  ? `الحد اليومي: ${authUser.quota.used} / ${authUser.quota.limit}`
+                  : `Daily Quota: ${authUser.quota.used} / ${authUser.quota.limit}`}
+              </Badge>
+            )}
+            <Button size="sm" variant="outline" onClick={() => void logout()}>
+              <LogOut size={12} />
+              {isAr ? 'خروج' : 'Sign Out'}
+            </Button>
+          </div>
+        </div>
+
+        <div className="mt-3 flex items-start gap-2 rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-2.5 text-[11.5px] text-dim">
+          <ShieldCheck size={14} className="mt-0.5 shrink-0 text-emerald-400" />
+          <span>
+            {authUser.role === 'owner'
+              ? isAr
+                ? 'أنت مالك المنصة — لا يوجد عليك أي حد يومي مطلقاً، وجميع محادثاتك ومشاريعك ومفاتيحك محمية ومعزولة تماماً.'
+                : 'You are the platform owner — zero daily limits, full administrative control, and complete data isolation.'
+              : authUser.quota.locked
+                ? isAr
+                  ? `خلاص انتهى حدّك اليومي بالكامل! يتجدد رصيدك تلقائياً بعد أسبوع بتاريخ ${authUser.quota.lockedUntil?.slice(0, 10) ?? ''}.`
+                  : `Your daily limit ran out! Your quota automatically renews in 1 week on ${authUser.quota.lockedUntil?.slice(0, 10) ?? ''}.`
+                : isAr
+                  ? `خصوصيتك معزولة 100% عن بقية المستخدمين. استهلاكك اليومي الحالي ${authUser.quota.used} من ${authUser.quota.limit} (ملاحظة: عند انتهاء الحد بالكامل يتجدد بعد أسبوع).`
+                  : `Your data is 100% isolated. Current daily usage: ${authUser.quota.used} / ${authUser.quota.limit} (if exhausted, renews after 1 week).`}
+          </span>
+        </div>
+      </div>
+
+      {/* Password Change */}
+      <form onSubmit={handlePasswordChange} className="rounded-xl border border-line bg-surface p-3.5">
+        <p className="mb-2.5 flex items-center gap-1.5 text-[12.5px] font-semibold text-text">
+          <Lock size={13} className="text-accent" />
+          {isAr ? 'تغيير كلمة المرور' : 'Change Password'}
+        </p>
+        <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+          <Field label={isAr ? 'كلمة المرور الحالية' : 'Current Password'} htmlFor="pw-cur">
+            <TextInput
+              id="pw-cur"
+              type="password"
+              dir="ltr"
+              value={currentPassword}
+              onChange={(e) => setCurrentPassword(e.target.value)}
+              placeholder="••••••••"
+            />
+          </Field>
+          <Field label={isAr ? 'كلمة المرور الجديدة (8+ أحرف)' : 'New Password (8+ chars)'} htmlFor="pw-new">
+            <TextInput
+              id="pw-new"
+              type="password"
+              dir="ltr"
+              minLength={8}
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+              placeholder="••••••••"
+            />
+          </Field>
+        </div>
+        <div className="mt-2.5 flex justify-end">
+          <Button
+            type="submit"
+            size="sm"
+            variant="primary"
+            loading={savingPw}
+            disabled={savingPw || !currentPassword || newPassword.length < 8}
+          >
+            {isAr ? 'تحديث كلمة المرور' : 'Update Password'}
+          </Button>
+        </div>
+      </form>
+
+      {/* Owner User Management Panel */}
+      {authUser.role === 'owner' ? (
+        <div className="rounded-xl border border-amber-400/25 bg-surface p-3.5">
+          <div className="mb-2.5 flex items-center justify-between">
+            <p className="flex items-center gap-1.5 text-[12.5px] font-semibold text-amber-300">
+              <Users size={14} />
+              {isAr ? 'لوحة المالك — المستخدمون المسجّلون والحد اليومي' : 'Owner Panel — Registered Users & Quotas'}
+            </p>
+            <Button size="sm" variant="ghost" onClick={() => void loadAdminUsers()} loading={loadingUsers}>
+              <RefreshCw size={12} />
+            </Button>
+          </div>
+
+          <div className="max-h-[210px] space-y-1.5 overflow-y-auto pe-1">
+            {users.map((u) => (
+              <div
+                key={u.id}
+                className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-line bg-bg/60 px-2.5 py-2 text-[11.5px]"
+              >
+                <div className="min-w-0">
+                  <p className="truncate font-medium text-text">
+                    {u.displayName}{' '}
+                    {u.role === 'owner' ? (
+                      <span className="text-[10px] text-amber-300">{isAr ? '(المالك)' : '(Owner)'}</span>
+                    ) : null}
+                  </p>
+                  <p className="truncate font-mono text-[10.5px] text-dim">{u.email}</p>
+                </div>
+
+                <div className="flex items-center gap-1.5">
+                  {u.role === 'owner' ? (
+                    <Badge tone="warning">{isAr ? 'غير محدود ∞' : 'Unlimited ∞'}</Badge>
+                  ) : (
+                    <>
+                      <Badge tone={u.quota.locked ? 'danger' : 'neutral'}>
+                        {u.quota.locked
+                          ? isAr
+                            ? `موقوف حتى ${u.quota.lockedUntil?.slice(0, 10) ?? ''}`
+                            : `Locked (${u.quota.lockedUntil?.slice(0, 10) ?? ''})`
+                          : `${u.quota.used}/${u.quota.limit}`}
+                      </Badge>
+                      <Button size="sm" variant="outline" onClick={() => void handleQuotaAction(u.id, 'reset')}>
+                        {isAr ? 'تصفير الحد' : 'Reset'}
+                      </Button>
+                      {!u.quota.locked ? (
+                        <Button size="sm" variant="ghost" onClick={() => void handleQuotaAction(u.id, 'lock_week')}>
+                          {isAr ? 'إيقاف أسبوع' : 'Lock 7d'}
+                        </Button>
+                      ) : null}
+                    </>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

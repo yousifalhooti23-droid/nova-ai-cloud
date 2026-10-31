@@ -1,16 +1,21 @@
-import { getStoredAccessToken } from './api';
+import { getStoredAccessToken, getStoredSessionToken } from './api';
 
 /**
- * Appends `?token=...` for `/api/uploads/*` URLs when NOVA_ACCESS_TOKEN is stored,
- * so native `<img>` and `<video>` elements load seamlessly on protected Cloudflare Workers.
+ * Appends `?token=...` for `/api/uploads/*` URLs when a user session or access token is stored,
+ * so native `<img>` and `<video>` elements load seamlessly while staying strictly private per user.
  */
 export function authMediaUrl(url: string | undefined): string {
   if (!url) return '';
   if (!url.startsWith('/api/uploads/')) return url;
-  const tok = getStoredAccessToken();
-  if (!tok) return url;
+  const sess = getStoredSessionToken();
+  const access = getStoredAccessToken();
+  const params = new URLSearchParams();
+  if (sess && !url.includes('token=')) params.set('token', sess);
+  if (access && !url.includes('access_token=')) params.set('access_token', access);
+  const qs = params.toString();
+  if (!qs) return url;
   const sep = url.includes('?') ? '&' : '?';
-  return `${url}${sep}token=${encodeURIComponent(tok)}`;
+  return `${url}${sep}${qs}`;
 }
 
 export function isImageMime(mime: string | undefined, name = ''): boolean {

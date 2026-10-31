@@ -1,10 +1,12 @@
 import type { Hono } from 'hono';
+import type { AuthUser } from '@nova/shared';
 import type { NovaConfig, RawEnv, RuntimeSecrets } from './env.js';
 import type { ModelRouter } from './ai/router.js';
 import type { SandboxAdapter } from './sandbox/types.js';
 import type { Store } from './storage/types.js';
 import type { BlobStore } from './storage/blob.js';
 import type { Logger } from './lib/log.js';
+import type { AuthService } from './auth/service.js';
 import { GitService } from './agent/git.js';
 
 /** Everything a route handler needs, assembled once per request context. */
@@ -18,6 +20,9 @@ export interface AppDeps {
   secrets: RuntimeSecrets;
   log: Logger;
   git: GitService;
+  auth: AuthService;
+  currentUser?: AuthUser | null;
+  currentTokenHash?: string | null;
 }
 
 export type AppEnv = { Variables: { deps: AppDeps; requestId: string; startedAt: number } };

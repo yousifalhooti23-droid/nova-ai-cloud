@@ -4,6 +4,7 @@ import { newId } from '@nova/shared';
 import { api, describeApiError, type UploadResult } from '@/lib/api';
 import { extractVideoKeyframes, isVideoMime } from '@/lib/media';
 import { streamRequest, type StreamHandle } from '@/lib/sse';
+import { useAppStore } from './app';
 
 export interface StreamingState {
   active: boolean;
@@ -268,8 +269,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
       set((s) => ({ streaming: { ...s.streaming, error: result.error ?? 'stream_failed' } }));
     }
     // Server is the source of truth for persisted messages.
-    await get().reloadMessages(targetId);
+    if (!targetId.startsWith('conv_local')) {
+      await get().reloadMessages(targetId);
+    }
     void get().loadConversations(projectId);
+    void useAppStore.getState().refreshAuth();
     set((s) => ({ composer: { ...s.composer, attachments: [], studioMode: 'chat' } }));
   },
 
@@ -297,7 +301,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
 
   reset() {
-    set({ activeId: null, messages: {}, streaming: emptyStreaming, lastError: null });
+    handle?.abort();
+    handle = null;
+    set({ conversations: [], activeId: null, messages: {}, streaming: emptyStreaming, lastError: null });
   },
 }));
 

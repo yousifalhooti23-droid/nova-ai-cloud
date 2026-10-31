@@ -39,6 +39,10 @@
   "vars": {
     "NOVA_RUNTIME": "workers",
     "NOVA_SANDBOX": "worker-isolate",
-    "NOVA_VERSION": "0.2.0"
+    "NOVA_REQUIRE_AUTH": "true",
+    "NOVA_OWNER_EMAIL": "yousifalhooti23@gmail.com",
+    "NOVA_OWNER_NAME": "Yousif",
+    "NOVA_USER_QUOTA_LIMIT": "20",
+    "NOVA_VERSION": "0.3.0"
   }
 }

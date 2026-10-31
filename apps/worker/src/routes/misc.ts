@@ -5,6 +5,7 @@ import type {
 } from '@nova/shared';
 import { isBinaryPath, maskSecretSafe, newId, truncate } from '@nova/shared';
 import type { Hono } from 'hono';
+import { constantTimeEqual } from '../auth/crypto.js';
 import type { AppEnv } from '../context.js';
 import { withRuntimeSecrets } from '../env.js';
 import { badRequest, forbidden, notFound, tooLarge, unauthorized } from '../lib/errors.js';
@@ -143,7 +144,14 @@ export function registerMiscRoutes(app: Hono<AppEnv>) {
     if (!blob) throw notFound('attachment bytes are missing from storage');
 
     const contentType = blob.contentType ?? record.mime;
-    const disposition = `inline; filename="${record.name.replace(/"/g, '')}"`;
+    const isActiveWebContent = /(html|svg|xml|javascript|ecmascript|xhtml)/i.test(contentType);
+    const safeFilename = record.name.replace(/["\\\r\n]/g, '_');
+    const disposition = `${isActiveWebContent ? 'attachment' : 'inline'}; filename="${safeFilename}"`;
+    const uploadSecurityHeaders = {
+      'x-content-type-options': 'nosniff',
+      'content-security-policy': "default-src 'none'; img-src 'self' data:; media-src 'self'; style-src 'unsafe-inline'; sandbox",
+      'cache-control': 'private, max-age=3600',
+    };
     const rangeHeader = c.req.header('range');
     if (rangeHeader && /^bytes=\d*-\d*$/i.test(rangeHeader)) {
       const [rawStart, rawEnd] = rangeHeader.replace(/^bytes=/i, '').split('-');
@@ -159,7 +167,7 @@ export function registerMiscRoutes(app: Hono<AppEnv>) {
             'content-range': `bytes ${start}-${end}/${blob.size}`,
             'accept-ranges': 'bytes',
             'content-disposition': disposition,
-            'cache-control': 'public, max-age=86400',
+            ...uploadSecurityHeaders,
           },
         });
       }
@@ -171,7 +179,7 @@ export function registerMiscRoutes(app: Hono<AppEnv>) {
         'content-length': String(blob.size),
         'accept-ranges': 'bytes',
         'content-disposition': disposition,
-        'cache-control': 'public, max-age=86400',
+        ...uploadSecurityHeaders,
       },
     });
   });
@@ -212,6 +220,10 @@ export function registerMiscRoutes(app: Hono<AppEnv>) {
    */
   app.get('/api/settings/provider-keys', async (c) => {
     const d = c.get('deps');
+    if (d.cfg.userAuthEnabled && d.currentUser?.role !== 'owner') {
+      const hidden: LocalProviderKeysResponse = { writable: false, persisted: false, keys: [] };
+      return c.json(hidden);
+    }
     const eff = withRuntimeSecrets(d.cfg, d.secrets);
     const ids: ProviderId[] = ['openrouter', 'custom', 'groq'];
     const keys: LocalProviderKeyStatus[] = ids.map((id) => {
@@ -229,7 +241,7 @@ export function registerMiscRoutes(app: Hono<AppEnv>) {
       };
     });
     const body: LocalProviderKeysResponse = {
-      writable: d.cfg.runtime === 'node' || Boolean(d.cfg.accessToken),
+      writable: d.cfg.runtime === 'node' || Boolean(d.cfg.accessToken) || d.currentUser?.role === 'owner',
       persisted: Boolean(d.cfg.envFilePath),
       keys,
     };
@@ -238,7 +250,10 @@ export function registerMiscRoutes(app: Hono<AppEnv>) {
 
   app.post('/api/settings/provider-keys', async (c) => {
     const d = c.get('deps');
-    if (d.cfg.runtime !== 'node' && !d.cfg.accessToken) {
+    if (d.cfg.userAuthEnabled && d.currentUser?.role !== 'owner') {
+      throw forbidden('صلاحية مالك المنصة مطلوبة لإدارة مفاتيح المزودين.', 'owner_only');
+    }
+    if (d.cfg.runtime !== 'node' && !d.cfg.accessToken && d.currentUser?.role !== 'owner') {
       throw forbidden(
         'On public Cloudflare Workers without NOVA_ACCESS_TOKEN, set secrets via `wrangler secret put OPENROUTER_API_KEY` or enable NOVA_ACCESS_TOKEN.',
         'local_keys_only',
@@ -309,7 +324,7 @@ export function registerMiscRoutes(app: Hono<AppEnv>) {
     if (!d.cfg.allowRuntimeKeys) throw forbidden('Runtime key injection is disabled (NOVA_ALLOW_RUNTIME_KEYS=false). Put keys in .dev.vars instead.', 'runtime_keys_disabled');
     if (!d.cfg.adminToken) throw forbidden('NOVA_ADMIN_TOKEN is not set, so this endpoint refuses all requests.', 'admin_token_missing');
     const token = c.req.header('x-nova-admin') ?? c.req.header('authorization')?.replace(/^Bearer\s+/i, '');
-    if (token !== d.cfg.adminToken) throw unauthorized('invalid admin token', 'bad_token');
+    if (!token || !constantTimeEqual(token, d.cfg.adminToken)) throw unauthorized('invalid admin token', 'bad_token');
 
     const req = (await c.req.json().catch(() => ({}))) as { provider?: ProviderId; apiKey?: string; baseUrl?: string; remove?: boolean };
     const provider = req.provider;
@@ -328,7 +343,7 @@ export function registerMiscRoutes(app: Hono<AppEnv>) {
     if (!d.cfg.allowRuntimeKeys) throw forbidden('Runtime key injection is disabled.', 'runtime_keys_disabled');
     if (!d.cfg.adminToken) throw forbidden('NOVA_ADMIN_TOKEN is not set.', 'admin_token_missing');
     const token = c.req.header('x-nova-admin') ?? c.req.header('authorization')?.replace(/^Bearer\s+/i, '');
-    if (token !== d.cfg.adminToken) throw unauthorized('invalid admin token', 'bad_token');
+    if (!token || !constantTimeEqual(token, d.cfg.adminToken)) throw unauthorized('invalid admin token', 'bad_token');
     return c.json({ keys: d.secrets.list() });
   });
 }

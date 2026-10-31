@@ -1,9 +1,10 @@
 import { create } from 'zustand';
-import type { HealthResponse, ModelsResponse, SandboxStatusResponse, SettingsResponse } from '@nova/shared';
-import { api, describeApiError, type ProbeResponse } from '@/lib/api';
+import type { AuthUser, HealthResponse, ModelsResponse, SandboxStatusResponse, SettingsResponse } from '@nova/shared';
+import { api, describeApiError, setStoredSessionToken, type ProbeResponse } from '@/lib/api';
 import type { Locale } from '@/i18n';
 
 export type View = 'chat' | 'code';
+export type SettingsTabId = 'general' | 'account' | 'providers' | 'agent' | 'storage';
 
 export interface Toast {
   id: string;
@@ -51,6 +52,8 @@ function savePrefs(prefs: Prefs) {
 
 interface AppState extends Prefs {
   ready: boolean;
+  authChecked: boolean;
+  authUser: AuthUser | null;
   health: HealthResponse | null;
   models: ModelsResponse | null;
   sandbox: SandboxStatusResponse | null;
@@ -58,7 +61,7 @@ interface AppState extends Prefs {
   probe: ProbeResponse | null;
   toasts: Toast[];
   settingsOpen: boolean;
-  settingsTab: 'general' | 'providers' | 'agent' | 'storage';
+  settingsTab: SettingsTabId;
   offline: boolean;
   loadSandbox: () => Promise<void>;
   loadSettings: () => Promise<void>;
@@ -66,6 +69,10 @@ interface AppState extends Prefs {
 
   init: () => Promise<void>;
   refreshHealth: () => Promise<void>;
+  refreshAuth: () => Promise<void>;
+  login: (email: string, password: string) => Promise<void>;
+  register: (displayName: string, email: string, password: string) => Promise<void>;
+  logout: () => Promise<void>;
   refreshModels: () => Promise<void>;
   refreshCatalog: () => Promise<void>;
   probeWorkersAi: () => Promise<void>;
@@ -73,7 +80,7 @@ interface AppState extends Prefs {
   setLocale: (locale: Locale) => Promise<void>;
   setView: (view: View) => void;
   toggleSidebar: () => void;
-  openSettings: (open?: boolean, tab?: 'general' | 'providers' | 'agent' | 'storage') => void;
+  openSettings: (open?: boolean, tab?: SettingsTabId) => void;
   toast: (t: Omit<Toast, 'id'>) => void;
   dismissToast: (id: string) => void;
 }
@@ -83,6 +90,8 @@ let toastSeq = 0;
 export const useAppStore = create<AppState>((set, get) => ({
   ...loadPrefs(),
   ready: false,
+  authChecked: false,
+  authUser: null,
   health: null,
   models: null,
   sandbox: null,
@@ -96,7 +105,11 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   async init() {
     if (get().ready) return;
-    await Promise.all([get().refreshHealth(), get().refreshModels(), get().loadSandbox(), get().loadSettings()]);
+    await Promise.all([get().refreshHealth(), get().refreshAuth()]);
+    const { health, authUser } = get();
+    if (!health?.userAuthEnabled || authUser) {
+      await Promise.all([get().refreshModels(), get().loadSandbox(), get().loadSettings()]);
+    }
     set({ ready: true });
   },
 
@@ -110,6 +123,60 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
   },
 
+  async refreshAuth() {
+    try {
+      const res = await api.authMe();
+      set({ authUser: res.authenticated ? res.user : null, authChecked: true });
+    } catch {
+      set({ authUser: null, authChecked: true });
+    }
+  },
+
+  async login(email, password) {
+    const res = await api.authLogin({ email, password });
+    if (res.token) setStoredSessionToken(res.token);
+    set({ authUser: res.user, authChecked: true, lastError: null });
+    await Promise.all([get().refreshModels(), get().loadSandbox(), get().loadSettings()]);
+    const [{ useChatStore }, { useCodeStore }] = await Promise.all([import('./chat'), import('./code')]);
+    useChatStore.getState().reset();
+    useCodeStore.getState().resetSession();
+    await Promise.all([
+      useChatStore.getState().loadConversations(),
+      useCodeStore.getState().loadProjects(),
+    ]);
+  },
+
+  async register(displayName, email, password) {
+    const res = await api.authRegister({ displayName, email, password });
+    if (res.token) setStoredSessionToken(res.token);
+    set({ authUser: res.user, authChecked: true, lastError: null });
+    await Promise.all([get().refreshModels(), get().loadSandbox(), get().loadSettings()]);
+    const [{ useChatStore }, { useCodeStore }] = await Promise.all([import('./chat'), import('./code')]);
+    useChatStore.getState().reset();
+    useCodeStore.getState().resetSession();
+    await Promise.all([
+      useChatStore.getState().loadConversations(),
+      useCodeStore.getState().loadProjects(),
+    ]);
+  },
+
+  async logout() {
+    try {
+      await api.authLogout();
+    } catch {
+      /* ignore network issues on logout */
+    }
+    setStoredSessionToken('');
+    const [{ useChatStore }, { useCodeStore }] = await Promise.all([import('./chat'), import('./code')]);
+    useChatStore.getState().reset();
+    useCodeStore.getState().resetSession();
+    set({
+      authUser: null,
+      settingsOpen: false,
+      settings: null,
+    });
+  },
+
   async refreshModels() {
     try {
       set({ models: await api.models() });
@@ -121,9 +188,10 @@ export const useAppStore = create<AppState>((set, get) => ({
   async refreshCatalog() {
     try {
       const results = await api.refreshModels();
-      const added = results.reduce((n, r) => n + r.added, 0);
-      const updated = results.reduce((n, r) => n + r.updated, 0);
-      const failed = results.filter((r) => r.error);
+      const list = Array.isArray(results) ? results : [results];
+      const added = list.reduce((n, r) => n + (r?.added ?? 0), 0);
+      const updated = list.reduce((n, r) => n + (r?.updated ?? 0), 0);
+      const failed = list.filter((r) => r?.error);
       get().toast({
         kind: failed.length && !added && !updated ? 'error' : 'success',
         message: `+${added} / ~${updated}`,
@@ -156,8 +224,10 @@ export const useAppStore = create<AppState>((set, get) => ({
   async setLocale(locale) {
     get().patchPrefs({ locale });
     try {
-      const settings = await api.updateSettings({ locale });
-      set({ settings });
+      if (!get().health?.userAuthEnabled || get().authUser) {
+        const settings = await api.updateSettings({ locale });
+        set({ settings });
+      }
     } catch {
       /* local preference still applies; server sync is best-effort */
     }
@@ -196,7 +266,6 @@ export const useAppStore = create<AppState>((set, get) => ({
     try {
       const settings = await api.getSettings();
       set({ settings });
-      // Server-side locale wins (single-owner cloud) but only on first boot.
       if (!get().ready && settings.locale && settings.locale !== get().locale) {
         get().patchPrefs({ locale: settings.locale as Locale });
       }
