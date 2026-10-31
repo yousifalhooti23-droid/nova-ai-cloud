@@ -89,10 +89,14 @@ export class ModelRouter {
     for (const a of this.adapters) for (const m of a.availableModels(cfg)) available.add(m.id);
 
     const byId = new Map<string, ModelInfo>();
-    for (const m of [...this.cached, ...this.adapters.flatMap((a) => a.availableModels(cfg))]) byId.set(m.id, m);
-    // Static catalog entries stay visible even when their provider is not configured,
-    // so the UI can explain *why* an option is unavailable instead of hiding it.
-    for (const m of CATALOG) if (!byId.has(m.id)) byId.set(m.id, m);
+    for (const m of [...this.cached, ...this.adapters.flatMap((a) => a.availableModels(cfg))]) {
+      if (m.freeTier === 'paid' || m.access === 'gated') continue;
+      byId.set(m.id, m);
+    }
+    for (const m of CATALOG) {
+      if (m.freeTier === 'paid' || m.access === 'gated') continue;
+      if (!byId.has(m.id)) byId.set(m.id, m);
+    }
 
     const models = [...byId.values()].sort((a, b) => {
       const av = available.has(a.id) ? 0 : 1;
@@ -236,19 +240,56 @@ export class ModelRouter {
     handlers: StreamHandlers = {},
     usageKind: 'chat' | 'agent' | 'title' | 'memory' = 'chat',
   ): Promise<CompletionResult & { model: ModelInfo; provider: ProviderId; warnings: string[] }> {
-    const resolution = await this.resolve({
+    let resolution = await this.resolve({
       modelId: req.modelId,
       modelClass: req.modelClass,
       requireTools: Boolean(req.tools?.length),
     });
-    const request: CompletionRequest = { ...req, model: resolution.model };
     const started = Date.now();
+    let streamedAny = false;
+    const trackedHandlers: StreamHandlers = {
+      ...handlers,
+      onText: handlers.onText
+        ? (chunk) => {
+            streamedAny = true;
+            handlers.onText!(chunk);
+          }
+        : undefined,
+    };
     let result: CompletionResult;
     try {
-      result = await resolution.adapter.complete(request, handlers, this.config());
+      result = await resolution.adapter.complete({ ...req, model: resolution.model }, trackedHandlers, this.config());
     } catch (err) {
       this.log.warn('provider completion failed', { model: resolution.model.id, error: String(err instanceof Error ? err.message : err) });
-      throw err;
+      const status = err instanceof HttpError ? err.status : 0;
+      if (!streamedAny && !req.modelId && (status === 429 || status === 502 || status === 503)) {
+        const cfg = this.config();
+        const { models } = await this.inventory();
+        const alt = models
+          .filter(
+            (m) =>
+              m.id !== resolution.model.id &&
+              m.access === 'open' &&
+              m.freeTier === 'free' &&
+              (!req.tools?.length || m.supportsTools) &&
+              this.adapters.find((a) => a.id === m.provider)?.status(cfg).status === 'ready',
+          )
+          .sort((a, b) => this.score(b, cfg, { requireTools: Boolean(req.tools?.length) }) - this.score(a, cfg, { requireTools: Boolean(req.tools?.length) }))[0];
+        if (alt) {
+          this.log.info('retrying completion on fallback free model', { from: resolution.model.id, to: alt.id });
+          resolution = {
+            model: alt,
+            adapter: this.adapterFor(alt),
+            via: 'fallback',
+            warnings: [...resolution.warnings, `Switched automatically from ${resolution.model.label} to ${alt.label}.`],
+          };
+          result = await resolution.adapter.complete({ ...req, model: alt }, handlers, cfg);
+        } else {
+          throw err;
+        }
+      } else {
+        throw err;
+      }
     }
     await this.store
       .recordUsage({

@@ -44,16 +44,22 @@ export function ModelPicker({
 
   const byProvider = useMemo(() => {
     const q = query.trim().toLowerCase();
+    // Only show 100% free, open, callable models whose provider is ready right now.
+    const callableOnly = models.filter(
+      (m) =>
+        m.freeTier !== 'paid' &&
+        m.access !== 'gated' &&
+        providerStatus(providers, m.provider) === 'ready',
+    );
     const filtered = q
-      ? models.filter((m) => `${m.id} ${m.label} ${m.vendor}`.toLowerCase().includes(q))
-      : models;
+      ? callableOnly.filter((m) => `${m.id} ${m.label} ${m.vendor}`.toLowerCase().includes(q))
+      : callableOnly;
     const groups = new Map<string, ModelInfo[]>();
     for (const m of filtered) {
       const list = groups.get(m.provider) ?? [];
       list.push(m);
       groups.set(m.provider, list);
     }
-    // ready providers first, then the rest
     const order = [...groups.entries()].sort((a, b) => {
       const sa = providerStatus(providers, a[0]);
       const sb = providerStatus(providers, b[0]);

@@ -199,28 +199,19 @@ describe('NOVA web UI', () => {
     await waitFor(() => expect(useChatStore.getState().streaming.active).toBe(false));
   });
 
-  it('marks unreachable and gated models as unusable in the picker', async () => {
+  it('hides unreachable, paid, and gated models from the picker so only usable free models appear', async () => {
     render(<App />);
     await screen.findByText('كيف أستطيع مساعدتك اليوم؟');
 
     await userEvent.click(screen.getByTitle('النموذج'));
 
-    // Ready provider → its model is selectable.
+    // Ready free provider → its model is selectable.
     const echo = await screen.findByText('Echo');
     expect(echo).toBeTruthy();
 
-    // Workers AI is not reachable locally → its models are disabled.
-    // (The id also appears in the collapsed trigger, hence getAllByText.)
-    const qwen = screen.getAllByText(/qwen3\.8 27b/i).at(-1)!;
-    const qwenButton = qwen.closest('button') as HTMLButtonElement;
-    expect(qwenButton.disabled).toBe(true);
-
-    // Gated models are labelled, never offered silently.
-    const gated = screen.getByText(/مقيّد — لا يُستخدم/);
-    expect(gated).toBeTruthy();
-
-    // The needs-remote reason is surfaced, not hidden.
-    expect(screen.getAllByText(/يتطلب تشغيلًا عن بُعد/).length).toBeGreaterThan(0);
+    // Unreachable and gated models are excluded completely from the dropdown list.
+    expect(screen.queryByText(/Apertus 8B/i)).toBeNull();
+    expect(screen.queryByText(/مقيّد — لا يُستخدم/)).toBeNull();
   });
 
   it('lists project files and loads one into the editor', async () => {

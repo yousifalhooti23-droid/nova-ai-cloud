@@ -90,14 +90,19 @@ async function streamToBytes(stream: ReadableStream<Uint8Array>): Promise<Uint8A
   return merged;
 }
 
+const IMAGE_PREFIX_RE =
+  /^(ارسم(?:\s+لي)?|انشئ\s+صور[ةه]|أنشئ\s+صور[ةه]|انشاء\s+صور[ةه]|إنشاء\s+صور[ةه]|ولد\s+صور[ةه]|ولّد\s+صور[ةه]|صمم\s+صور[ةه]|ابغى\s+صور[ةه]|أريد\s+صور[ةه]|اريد\s+صور[ةه]|سوي(?:\s+لي)?\s+صور[ةه]|اصنع\s+صور[ةه]|اعمل\s+صور[ةه]|صور[ةه](?:\s+عن|\s+لـ|\s+حول)?|create an? image(?:\s+of)?|generate an? image(?:\s+of)?|draw)\s*/i;
+
+const VIDEO_PREFIX_RE =
+  /^(انشئ\s+(?:فيديو|فديو|قديو)|أنشئ\s+(?:فيديو|فديو|قديو)|انشاء\s+(?:فيديو|فديو|قديو)|إنشاء\s+(?:فيديو|فديو|قديو)|صمم\s+(?:فيديو|فديو|قديو)|اصنع\s+(?:فيديو|فديو|قديو)|ولد\s+(?:فيديو|فديو|قديو)|ولّد\s+(?:فيديو|فديو|قديو)|سوي(?:\s+لي)?\s+(?:فيديو|فديو|قديو)|ابغى\s+(?:فيديو|فديو|قديو)|أريد\s+(?:فيديو|فديو|قديو)|اريد\s+(?:فيديو|فديو|قديو)|اعمل(?:\s+لي)?\s+(?:فيديو|فديو|قديو)|(?:فيديو|فديو|قديو)(?:\s+عن|\s+حول|\s+لـ)?|create a video(?:\s+about|\s+of)?|generate a video(?:\s+about|\s+of)?|make a video(?:\s+about|\s+of)?)\s*/i;
+
 /**
  * Optionally translates/expands a user prompt into a crisp English visual prompt
  * when a free text LLM is configured; falls back gracefully with zero errors.
  */
 async function refineVisualPrompt(d: AppDeps, rawPrompt: string, skipEnhance = false): Promise<string> {
-  const clean = rawPrompt
-    .replace(/^(ارسم|انشئ صورة|أنشئ صورة|ولد صورة|ولّد صورة|صمم صورة|ابغى صورة|أريد صورة|سوي صورة|create an? image of|generate an? image of|draw)\s*/i, '')
-    .trim() || rawPrompt.trim();
+  const stripped = rawPrompt.replace(IMAGE_PREFIX_RE, '').trim();
+  const clean = stripped.length >= 2 ? stripped : 'منظر سينمائي خيالي لمدينة مستقبلية مضيئة عند الغروب وسط الجبال والطبيعة';
 
   if (skipEnhance) return clean;
   const hasReadyLlm = d.router.providerInfos().some((p) => p.status === 'ready' && p.id !== 'diagnostic');
@@ -140,6 +145,30 @@ async function refineVisualPrompt(d: AppDeps, rawPrompt: string, skipEnhance = f
   return `${clean}, cinematic lighting, high detail, photorealistic`;
 }
 
+async function runWorkersAiImageModel(
+  ai: { run(model: string, params: Record<string, unknown>): Promise<unknown> },
+  model: string,
+  params: Record<string, unknown>,
+): Promise<{ bytes: Uint8Array; mime: string } | null> {
+  const raw = await ai.run(model, params);
+  if (raw instanceof Uint8Array && raw.byteLength > 256) {
+    return { bytes: raw, mime: 'image/png' };
+  }
+  if (raw && typeof (raw as ReadableStream<Uint8Array>).getReader === 'function') {
+    const bytes = await streamToBytes(raw as ReadableStream<Uint8Array>);
+    if (bytes.byteLength > 256) return { bytes, mime: 'image/png' };
+  }
+  if (raw && typeof raw === 'object') {
+    const obj = raw as { image?: unknown; result?: { image?: unknown } };
+    const b64 = typeof obj.image === 'string' ? obj.image : typeof obj.result?.image === 'string' ? obj.result.image : null;
+    if (b64) {
+      const bytes = base64ToBytes(b64);
+      if (bytes.byteLength > 256) return { bytes, mime: 'image/jpeg' };
+    }
+  }
+  return null;
+}
+
 export async function generateCloudImage(
   d: AppDeps,
   opts: {
@@ -149,6 +178,7 @@ export async function generateCloudImage(
     conversationId?: string | null;
     projectId?: string | null;
     skipEnhance?: boolean;
+    fast?: boolean;
     signal?: AbortSignal;
   },
 ): Promise<StudioImageResponse> {
@@ -158,66 +188,101 @@ export async function generateCloudImage(
 
   let imageBytes: Uint8Array | null = null;
   let mime = 'image/jpeg';
-  let provider = 'pollinations-sana';
+  let provider = 'workers-ai-flux';
+  let lastErr = '';
 
-  // 1. Try Cloudflare Workers AI (@cf/black-forest-labs/flux-1-schnell — Free 10k neurons/day) when in Workers runtime
-  if (d.cfg.runtime === 'workers' && d.env.AI) {
-    try {
-      const ai = d.env.AI as { run(model: string, params: Record<string, unknown>): Promise<unknown> };
-      const raw = await ai.run('@cf/black-forest-labs/flux-1-schnell', {
-        prompt: truncate(promptUsed, 900),
-        num_steps: 4,
-      });
-      if (raw && typeof raw === 'object' && 'image' in (raw as Record<string, unknown>) && typeof (raw as { image?: unknown }).image === 'string') {
-        imageBytes = base64ToBytes((raw as { image: string }).image);
-        mime = 'image/jpeg';
-        provider = 'workers-ai-flux';
-      } else if (raw instanceof Uint8Array) {
-        imageBytes = raw;
-        mime = 'image/png';
-        provider = 'workers-ai-flux';
-      } else if (raw && typeof (raw as ReadableStream<Uint8Array>).getReader === 'function') {
-        imageBytes = await streamToBytes(raw as ReadableStream<Uint8Array>);
-        mime = 'image/png';
-        provider = 'workers-ai-flux';
+  // 1. Primary 100% Free Cloud GPU Cascade: Cloudflare Workers AI (Flux-1-Schnell + SDXL-Lightning + SDXL-Base)
+  if (d.env.AI) {
+    const ai = d.env.AI as { run(model: string, params: Record<string, unknown>): Promise<unknown> };
+    const trimmedPrompt = truncate(promptUsed, 900);
+    const candidates: { id: string; model: string; params: Record<string, unknown> }[] = opts.fast
+      ? [
+          {
+            id: 'workers-ai-sdxl-lightning',
+            model: '@cf/bytedance/stable-diffusion-xl-lightning',
+            params: { prompt: trimmedPrompt, width, height, num_steps: 4 },
+          },
+          {
+            id: 'workers-ai-flux',
+            model: '@cf/black-forest-labs/flux-1-schnell',
+            params: { prompt: trimmedPrompt, steps: 4 },
+          },
+          {
+            id: 'workers-ai-sdxl',
+            model: '@cf/stabilityai/stable-diffusion-xl-base-1.0',
+            params: { prompt: trimmedPrompt, width, height, num_steps: 12 },
+          },
+        ]
+      : [
+          {
+            id: 'workers-ai-flux',
+            model: '@cf/black-forest-labs/flux-1-schnell',
+            params: { prompt: trimmedPrompt, steps: 4 },
+          },
+          {
+            id: 'workers-ai-sdxl-lightning',
+            model: '@cf/bytedance/stable-diffusion-xl-lightning',
+            params: { prompt: trimmedPrompt, width, height, num_steps: 4 },
+          },
+          {
+            id: 'workers-ai-sdxl',
+            model: '@cf/stabilityai/stable-diffusion-xl-base-1.0',
+            params: { prompt: trimmedPrompt, width, height, num_steps: 12 },
+          },
+        ];
+
+    for (const candidate of candidates) {
+      try {
+        const res = await runWorkersAiImageModel(ai, candidate.model, candidate.params);
+        if (res && res.bytes.byteLength > 256) {
+          imageBytes = res.bytes;
+          mime = res.mime;
+          provider = candidate.id;
+          break;
+        }
+      } catch (err) {
+        lastErr = err instanceof Error ? err.message : String(err);
+        d.log.warn('Workers AI image engine failed, trying next free engine', { model: candidate.model, error: lastErr });
       }
-    } catch (err) {
-      d.log.warn('Workers AI Flux generation fell back to Pollinations cloud GPU', { error: String(err) });
     }
   }
 
-  // 2. Cloud GPU fallback / Desktop default: Pollinations (NVIDIA Sana — 100% free, zero API key)
-  if (!imageBytes || imageBytes.byteLength < 256) {
-    const seed = Math.floor(Math.random() * 999_999) + 1;
-    const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(truncate(promptUsed, 500))}?width=${width}&height=${height}&seed=${seed}&nologo=true`;
-    let lastErr = '';
-    for (let attempt = 0; attempt < 2; attempt++) {
-      const ac = new AbortController();
-      const timer = setTimeout(() => ac.abort(), 28_000);
-      try {
-        const resp = await fetch(url, {
-          headers: { Accept: 'image/*' },
-          signal: opts.signal ? AbortSignal.any([opts.signal, ac.signal]) : ac.signal,
-        });
-        if (resp.ok) {
-          const buf = new Uint8Array(await resp.arrayBuffer());
+  // 2. Optional Cloud Worker Bridge when running locally without direct AI binding
+  const cloudBridgeUrl = typeof d.env.NOVA_CLOUD_URL === 'string' ? d.env.NOVA_CLOUD_URL.trim().replace(/\/$/, '') : '';
+  if ((!imageBytes || imageBytes.byteLength < 256) && cloudBridgeUrl && d.cfg.runtime === 'node') {
+    try {
+      const bridgeResp = await fetch(`${cloudBridgeUrl}/api/studio/image`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: promptUsed, width, height }),
+        signal: opts.signal,
+      });
+      if (bridgeResp.ok) {
+        const meta = (await bridgeResp.json()) as StudioImageResponse;
+        const imgUrl = meta.attachment?.url?.startsWith('http') ? meta.attachment.url : `${cloudBridgeUrl}${meta.attachment.url}`;
+        const rawImg = await fetch(imgUrl, { signal: opts.signal });
+        if (rawImg.ok) {
+          const buf = new Uint8Array(await rawImg.arrayBuffer());
           if (buf.byteLength > 256) {
             imageBytes = buf;
-            mime = resp.headers.get('content-type')?.split(';')[0]?.trim() || 'image/jpeg';
-            provider = 'cloud-sana-free';
-            break;
+            mime = meta.attachment.mime || 'image/jpeg';
+            provider = meta.provider || 'nova-cloud-gpu';
           }
         }
-        lastErr = `HTTP ${resp.status}`;
-      } catch (err) {
-        lastErr = err instanceof Error ? err.message : String(err);
-      } finally {
-        clearTimeout(timer);
+      } else {
+        lastErr = `Cloud bridge HTTP ${bridgeResp.status}`;
       }
+    } catch (err) {
+      lastErr = err instanceof Error ? err.message : String(err);
     }
-    if (!imageBytes || imageBytes.byteLength < 256) {
-      throw new HttpError(502, `تعذّر توليد الصورة من السحابة المجانية حالياً (${lastErr}). حاول مرة أخرى بعد لحظات.`, 'image_generation_failed');
-    }
+  }
+
+  if (!imageBytes || imageBytes.byteLength < 256) {
+    throw new HttpError(
+      502,
+      `تعذّر توليد الصورة حالياً (${lastErr || 'لا يوجد اتصال بمحرك الصور السحابي'}). حاول مرة أخرى بعد لحظات.`,
+      'image_generation_failed',
+    );
   }
 
   const ext = mime.includes('png') ? 'png' : mime.includes('webp') ? 'webp' : 'jpg';
@@ -255,22 +320,26 @@ interface PlannedVideo {
 }
 
 async function planVideoStoryboard(d: AppDeps, rawPrompt: string, isAr: boolean): Promise<PlannedVideo> {
-  const clean = rawPrompt
-    .replace(/^(انشئ فيديو|أنشئ فيديو|صمم فيديو|اصنع فيديو|ولد فيديو|ولّد فيديو|سوي فيديو|ابغى فيديو|أريد فيديو|create a video|generate a video|make a video)\s*(عن|حول|لـ|about|of|for)?\s*/i, '')
-    .trim() || rawPrompt.trim();
+  const stripped = rawPrompt.replace(VIDEO_PREFIX_RE, '').trim();
+  const clean =
+    stripped.length >= 2
+      ? stripped
+      : isAr
+        ? 'رحلة سينمائية مذهلة فوق مدينة مستقبلية مضيئة وسط الجبال والنجوم'
+        : 'Epic cinematic journey over a glowing futuristic city amidst misty mountains and stars';
 
   const hasReadyLlm = d.router.providerInfos().some((p) => p.status === 'ready' && p.id !== 'diagnostic');
   if (hasReadyLlm) {
     try {
       const resolved = await d.router.resolve({ modelClass: 'chat' });
       const ac = new AbortController();
-      const timer = setTimeout(() => ac.abort(), 9000);
+      const timer = setTimeout(() => ac.abort(), 11000);
       try {
         const out = await d.router.complete(
           {
             modelId: resolved.model.id,
             stream: false,
-            maxTokens: 420,
+            maxTokens: 450,
             temperature: 0.6,
             signal: ac.signal,
             messages: [
@@ -296,7 +365,7 @@ async function planVideoStoryboard(d: AppDeps, rawPrompt: string, isAr: boolean)
               title: (parsed.title || clean).slice(0, 80),
               scenes: parsed.scenes.slice(0, 4).map((s) => ({
                 caption: String(s.caption || clean).slice(0, 140),
-                visualPrompt: String(s.visualPrompt || `${clean}, cinematic widescreen shot`),
+                visualPrompt: String(s.visualPrompt || 'Futuristic cinematic widescreen landscape, dramatic golden lighting, 8k photorealistic'),
               })),
             };
           }
@@ -309,20 +378,24 @@ async function planVideoStoryboard(d: AppDeps, rawPrompt: string, isAr: boolean)
     }
   }
 
+  const englishSubject = hasArabic(clean)
+    ? 'futuristic glowing oasis city nestled between dramatic mountains under twilight sky'
+    : clean;
+
   return {
     title: clean.slice(0, 70),
     scenes: isAr
       ? [
-          { caption: `مشهد افتتاحي: ${clean}`, visualPrompt: `Wide cinematic establishing shot of ${clean}, golden hour lighting, dramatic atmosphere, ultra detailed 16:9` },
-          { caption: `تفاصيل المشهد عن قرب بزاوية سينمائية`, visualPrompt: `Detailed close-up cinematic shot of ${clean}, shallow depth of field, rich textures, volumetric light` },
-          { caption: `حركة ديناميكية وإضاءة احترافية`, visualPrompt: `Dynamic tracking angle of ${clean}, vibrant atmosphere, dramatic perspective, film grain, 8k` },
-          { caption: `المشهد الختامي البانورامي`, visualPrompt: `Epic panoramic finale shot of ${clean}, breathtaking horizon, cinematic color grading, masterpiece` },
+          { caption: `مشهد افتتاحي: ${clean}`, visualPrompt: `Wide cinematic establishing shot of ${englishSubject}, golden hour lighting, dramatic atmosphere, ultra detailed 16:9` },
+          { caption: `تفاصيل المشهد عن قرب بزاوية سينمائية`, visualPrompt: `Detailed close-up cinematic shot of ${englishSubject}, shallow depth of field, rich textures, volumetric light` },
+          { caption: `حركة ديناميكية وإضاءة احترافية`, visualPrompt: `Dynamic aerial tracking angle of ${englishSubject}, vibrant atmosphere, dramatic perspective, film grain, 8k` },
+          { caption: `المشهد الختامي البانورامي`, visualPrompt: `Epic panoramic finale shot of ${englishSubject}, breathtaking horizon, cinematic color grading, masterpiece` },
         ]
       : [
-          { caption: `Opening scene: ${clean}`, visualPrompt: `Wide cinematic establishing shot of ${clean}, golden hour lighting, dramatic atmosphere, ultra detailed 16:9` },
-          { caption: `Intricate details up close`, visualPrompt: `Detailed close-up cinematic shot of ${clean}, shallow depth of field, rich textures, volumetric light` },
-          { caption: `Dynamic motion and perspective`, visualPrompt: `Dynamic tracking angle of ${clean}, vibrant atmosphere, dramatic perspective, film grain, 8k` },
-          { caption: `Grand panoramic finale`, visualPrompt: `Epic panoramic finale shot of ${clean}, breathtaking horizon, cinematic color grading, masterpiece` },
+          { caption: `Opening scene: ${clean}`, visualPrompt: `Wide cinematic establishing shot of ${englishSubject}, golden hour lighting, dramatic atmosphere, ultra detailed 16:9` },
+          { caption: `Intricate details up close`, visualPrompt: `Detailed close-up cinematic shot of ${englishSubject}, shallow depth of field, rich textures, volumetric light` },
+          { caption: `Dynamic motion and perspective`, visualPrompt: `Dynamic aerial tracking angle of ${englishSubject}, vibrant atmosphere, dramatic perspective, film grain, 8k` },
+          { caption: `Grand panoramic finale`, visualPrompt: `Epic panoramic finale shot of ${englishSubject}, breathtaking horizon, cinematic color grading, masterpiece` },
         ],
   };
 }
@@ -340,29 +413,37 @@ export async function generateCloudVideo(
   const isAr = opts.locale ? opts.locale === 'ar' : hasArabic(opts.prompt);
   const plan = await planVideoStoryboard(d, opts.prompt, isAr);
 
-  const generated = await Promise.all(
-    plan.scenes.map(async (scene, idx) => {
-      const img = await generateCloudImage(d, {
-        prompt: scene.visualPrompt,
-        width: 768,
-        height: 448,
-        conversationId: opts.conversationId,
-        projectId: opts.projectId,
-        skipEnhance: true,
-        signal: opts.signal,
-      });
-      return {
-        imageUrl: img.attachment.url,
-        attachmentId: img.attachment.id,
-        caption: scene.caption,
-        durationSec: 3.5,
-        motion: MOTIONS[idx % MOTIONS.length],
-        provider: img.provider,
-      };
-    }),
-  );
+  // Render in pairs of 2 using fast cloud GPU mode (SDXL-Lightning -> Flux) for ~3s total latency & zero rate-limit bursts
+  const generated: (StudioVideoScene & { provider: string })[] = [];
+  for (let i = 0; i < plan.scenes.length; i += 2) {
+    const batch = plan.scenes.slice(i, i + 2);
+    const batchResults = await Promise.all(
+      batch.map(async (scene, offset) => {
+        const idx = i + offset;
+        const img = await generateCloudImage(d, {
+          prompt: scene.visualPrompt,
+          width: 768,
+          height: 448,
+          conversationId: opts.conversationId,
+          projectId: opts.projectId,
+          skipEnhance: true,
+          fast: true,
+          signal: opts.signal,
+        });
+        return {
+          imageUrl: img.attachment.url,
+          attachmentId: img.attachment.id,
+          caption: scene.caption,
+          durationSec: 3.5,
+          motion: MOTIONS[idx % MOTIONS.length],
+          provider: img.provider,
+        };
+      }),
+    );
+    generated.push(...batchResults);
+  }
 
-  const provider = generated[0]?.provider ?? 'cloud-sana-free';
+  const provider = generated[0]?.provider ?? 'workers-ai-sdxl-lightning';
   const scenes: StudioVideoScene[] = generated.map(({ provider: _p, ...rest }) => rest);
   const payload = JSON.stringify({ title: plan.title, lang: isAr ? 'ar' : 'en', scenes });
   const markdown = `\`\`\`nova-video\n${payload}\n\`\`\``;
@@ -375,13 +456,13 @@ export function detectStudioIntent(message: string, explicitMode?: string): 'ima
     return explicitMode;
   }
   const m = message.trim();
-  if (/^(ارسم|انشئ صورة|أنشئ صورة|ولد صورة|ولّد صورة|صمم صورة|ابغى صورة|أريد صورة|سوي صورة|اصنع صورة|create an? image|generate an? image|draw\s)/i.test(m)) {
+  if (/^(ارسم|انشئ\s+صور[ةه]|أنشئ\s+صور[ةه]|انشاء\s+صور[ةه]|إنشاء\s+صور[ةه]|ولد\s+صور[ةه]|ولّد\s+صور[ةه]|صمم\s+صور[ةه]|ابغى\s+صور[ةه]|أريد\s+صور[ةه]|اريد\s+صور[ةه]|سوي(?:\s+لي)?\s+صور[ةه]|اصنع\s+صور[ةه]|اعمل\s+صور[ةه]|create an? image|generate an? image|draw\s)/i.test(m)) {
     return 'image';
   }
-  if (/^(انشئ فيديو|أنشئ فيديو|صمم فيديو|اصنع فيديو|ولد فيديو|ولّد فيديو|سوي فيديو|ابغى فيديو|أريد فيديو|اعمل فيديو|create a video|generate a video|make a video)/i.test(m)) {
+  if (/^(انشئ\s+(?:فيديو|فديو|قديو)|أنشئ\s+(?:فيديو|فديو|قديو)|انشاء\s+(?:فيديو|فديو|قديو)|إنشاء\s+(?:فيديو|فديو|قديو)|صمم\s+(?:فيديو|فديو|قديو)|اصنع\s+(?:فيديو|فديو|قديو)|ولد\s+(?:فيديو|فديو|قديو)|ولّد\s+(?:فيديو|فديو|قديو)|سوي(?:\s+لي)?\s+(?:فيديو|فديو|قديو)|ابغى\s+(?:فيديو|فديو|قديو)|أريد\s+(?:فيديو|فديو|قديو)|اريد\s+(?:فيديو|فديو|قديو)|اعمل(?:\s+لي)?\s+(?:فيديو|فديو|قديو)|create a video|generate a video|make a video)/i.test(m)) {
     return 'video';
   }
-  if (/^(صمم موقع|انشئ موقع|أنشئ موقع|سوي موقع|ابني موقع|اصنع موقع|اريد موقع|أريد موقع|ابغى موقع|صمم صفحة ويب|صمم متجر|build a website|create a website|design a website|make a landing page)/i.test(m)) {
+  if (/^(صمم\s+موقع|انشئ\s+موقع|أنشئ\s+موقع|انشاء\s+موقع|إنشاء\s+موقع|سوي(?:\s+لي)?\s+موقع|ابني\s+موقع|اصنع\s+موقع|اريد\s+موقع|أريد\s+موقع|ابغى\s+موقع|صمم\s+صفح[ةه]\s+ويب|صمم\s+متجر|build a website|create a website|design a website|make a landing page)/i.test(m)) {
     return 'website';
   }
   return null;

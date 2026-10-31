@@ -74,24 +74,6 @@ interface Seed {
 
 const SEEDS: Seed[] = [
   {
-    upstreamId: 'thinkingmachines/inkling:free',
-    label: 'Inkling (free)',
-    vendor: 'Thinking Machines',
-    classes: ['chat', 'reasoning', 'long-context'],
-    contextWindow: 1048576,
-    supportsTools: true,
-    supportsVision: true,
-  },
-  {
-    upstreamId: 'thinkingmachines/inkling-small:free',
-    label: 'Inkling Small (free)',
-    vendor: 'Thinking Machines',
-    classes: ['chat', 'long-context'],
-    contextWindow: 1048576,
-    supportsTools: true,
-    supportsVision: true,
-  },
-  {
     upstreamId: 'nvidia/nemotron-3.5-lightning:free',
     label: 'Nemotron 3.5 Lightning (free)',
     vendor: 'NVIDIA',
@@ -127,47 +109,12 @@ const SEEDS: Seed[] = [
     supportsVision: true,
   },
   {
-    upstreamId: 'poolside/laguna-s-2.1:free',
-    label: 'Laguna S 2.1 (free)',
-    vendor: 'Poolside',
-    classes: ['coding', 'chat'],
-    contextWindow: 262144,
-    supportsTools: true,
-    notes: 'Poolside models are code-focused.',
-  },
-  {
-    upstreamId: 'poolside/laguna-xs-2.1:free',
-    label: 'Laguna XS 2.1 (free)',
-    vendor: 'Poolside',
-    classes: ['coding', 'chat'],
-    contextWindow: 262144,
-    supportsTools: true,
-  },
-  {
     upstreamId: 'cohere/north-mini-code:free',
     label: 'North Mini Code (free)',
     vendor: 'Cohere',
     classes: ['coding'],
     contextWindow: 256000,
     supportsTools: true,
-  },
-  {
-    upstreamId: 'google/gemma-4-31b-it:free',
-    label: 'Gemma 4 31B IT (free)',
-    vendor: 'Google',
-    classes: ['chat', 'long-context'],
-    contextWindow: 262144,
-    supportsTools: true,
-    supportsVision: true,
-  },
-  {
-    upstreamId: 'google/gemma-4-26b-a4b-it:free',
-    label: 'Gemma 4 26B A4B IT (free)',
-    vendor: 'Google',
-    classes: ['chat', 'long-context'],
-    contextWindow: 262144,
-    supportsTools: true,
-    supportsVision: true,
   },
   {
     upstreamId: 'dots-studio/dots-3-note-preview:free',
@@ -179,29 +126,12 @@ const SEEDS: Seed[] = [
     supportsVision: true,
   },
   {
-    upstreamId: 'recursive/flint-v1.0:free',
-    label: 'Flint v1.0 (free)',
-    vendor: 'Recursive',
-    classes: ['chat', 'reasoning'],
-    contextWindow: 262144,
-    supportsTools: true,
-  },
-  {
     upstreamId: 'xingchen-agi/xing4.0-29b-a4b:free',
     label: 'Xing 4.0 29B A4B (free)',
     vendor: 'Xingchen AGI',
     classes: ['chat'],
     contextWindow: 262144,
     supportsTools: true,
-  },
-  {
-    upstreamId: 'liquid/lfm-2.5-2.6b:free',
-    label: 'LFM 2.5 2.6B (free)',
-    vendor: 'Liquid AI',
-    classes: ['chat'],
-    contextWindow: 65536,
-    supportsTools: true,
-    notes: 'Small/fast; useful for cheap helper calls (titles, summaries).',
   },
   {
     upstreamId: 'openrouter/free',
@@ -256,6 +186,8 @@ export function fromOpenRouterApi(m: OpenRouterApiModel, verifiedAt = new Date()
   const prompt = Number(m.pricing?.prompt ?? -1);
   const completion = Number(m.pricing?.completion ?? -1);
   const isFree = prompt === 0 && completion === 0;
+  // Strictly exclude paid or gated models so only 100% free usable models enter the catalog.
+  if (!isFree || AGENTIC_HARNESS_GATED.has(m.id)) return null;
   const supported = m.supported_parameters ?? [];
   const classes: ModelInfo['classes'] = ['chat'];
   const ctx = m.context_length ?? 8192;

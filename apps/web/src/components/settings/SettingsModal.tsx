@@ -315,7 +315,9 @@ function ProvidersTab() {
   };
 
   const providers = health?.providers ?? models?.providers ?? [];
-  const ordered = PROVIDER_ORDER.map((id) => providers.find((p) => p.id === id)).filter(Boolean) as typeof providers;
+  const ordered = PROVIDER_ORDER
+    .map((id) => providers.find((p) => p.id === id))
+    .filter((p): p is NonNullable<typeof p> => Boolean(p && (p.id === 'workers-ai' || p.id === 'openrouter' || p.status === 'ready')));
 
   return (
     <div className="flex flex-col gap-3">

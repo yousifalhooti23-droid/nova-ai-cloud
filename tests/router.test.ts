@@ -24,20 +24,12 @@ describe('catalog integrity', () => {
     }
   });
 
-  it('never labels a paid-only Workers AI model as free', () => {
-    const paid = WORKERS_AI_MODELS.filter((m) => m.freeTier === 'paid');
-    expect(paid.length).toBeGreaterThan(0);
-    for (const m of paid) expect(m.notes).toMatch(/Workers Paid|AI Gateway credits/i);
-    // Verified on 2026-10-30 from each model page on developers.cloudflare.com.
-    expect(paid.map((m) => m.upstreamId).sort()).toEqual(
-      [
-        '@cf/deepseek-ai/deepseek-v4-flash-0731',
-        '@cf/deepseek-ai/deepseek-v4-pro-0813',
-        '@cf/moonshotai/kimi-k2.7-code',
-        '@cf/zai-org/glm-5.3',
-        '@cf/zai-org/glm-5.3-flash',
-      ].sort(),
-    );
+  it('excludes all paid-only and gated models from the catalog', () => {
+    expect(CATALOG.every((m) => m.freeTier === 'free')).toBe(true);
+    expect(CATALOG.every((m) => m.access === 'open')).toBe(true);
+    expect(WORKERS_AI_MODELS.some((m) => m.freeTier === 'paid')).toBe(false);
+    expect(WORKERS_AI_MODELS.some((m) => m.access === 'gated')).toBe(false);
+    expect(OPENROUTER_MODELS.some((m) => m.access === 'gated')).toBe(false);
   });
 
   it('all OpenRouter catalog entries are ":free" variants or the auto-router', () => {
@@ -47,21 +39,26 @@ describe('catalog integrity', () => {
       expect(isFreeVariant || isAutoRouter, `${m.upstreamId} is not a free variant`).toBe(true);
     }
   });
-
-  it('gated models are marked so the router can skip them', () => {
-    const gated = WORKERS_AI_MODELS.filter((m) => m.access === 'gated');
-    expect(gated.map((m) => m.upstreamId).sort()).toEqual(['@cf/swiss-ai/apertus-v1.5-8b', '@cf/utter-project/eurollm-9b-it']);
-  });
 });
 
 describe('model resolution', () => {
   const codingModel = WORKERS_AI_MODELS.find((m) => m.upstreamId === '@cf/qwen/qwen3.8-27b')!;
   const noToolsModel = WORKERS_AI_MODELS.find((m) => m.upstreamId === '@cf/qwen/qwq-32b')!;
-  const gatedModel = WORKERS_AI_MODELS.find((m) => m.access === 'gated')!;
-  // Not OPENROUTER_MODELS[0]: that is `thinkingmachines/inkling:free`, which was
-  // verified on 2026-10-30 to answer HTTP 403 "only available on agentic
-  // harnesses" for plain API keys, so it is catalogued as gated and skipped.
-  const openrouterModel = OPENROUTER_MODELS.find((m) => m.access !== 'gated')!;
+  const gatedModel: ModelInfo = {
+    ...codingModel,
+    id: 'workers-ai:gated-test',
+    upstreamId: '@cf/test/gated',
+    label: 'Gated Test',
+    access: 'gated',
+  };
+  const paidModel: ModelInfo = {
+    ...codingModel,
+    id: 'workers-ai:paid-test',
+    upstreamId: '@cf/test/paid',
+    label: 'Paid Test',
+    freeTier: 'paid',
+  };
+  const openrouterModel = OPENROUTER_MODELS[0]!;
 
   it('throws ProviderNotConfiguredError when nothing is callable (never fakes output)', async () => {
     const { router } = makeRouter([new CatalogAdapter('workers-ai', 'WAI', [], 'x', false, 'AI binding missing')]);
@@ -88,25 +85,22 @@ describe('model resolution', () => {
     expect(res.warnings.join(' ')).toMatch(/function calling/);
   });
 
-  it('catalogues the agentic-harness-only OpenRouter models as gated', () => {
-    // Verified live on 2026-10-30 by scripts/probe-openrouter-free.mjs:
-    // these answer HTTP 403 for a plain API key even though the public
-    // /api/v1/models metadata advertises them as free with no restrictions.
-    const gated = OPENROUTER_MODELS.filter((m) => m.access === 'gated').map((m) => m.upstreamId);
-    expect(gated).toContain('thinkingmachines/inkling:free');
-    expect(gated).toContain('thinkingmachines/inkling-small:free');
-    for (const m of OPENROUTER_MODELS.filter((x) => x.access === 'gated')) {
-      expect(m.notes ?? '').toMatch(/agentic harness/i);
-    }
-  });
-
-  it('never routes to an agentic-harness-gated model even when it scores best', async () => {
-    // inkling:free has the largest context among the free OpenRouter seeds, so
-    // without the gate it would win the score and the user would get a 403.
-    const cfg = testConfig({ NOVA_PROVIDER_PRIORITY: 'openrouter' });
-    const inkling = OPENROUTER_MODELS.find((m) => m.upstreamId === 'thinkingmachines/inkling:free')!;
-    const { router } = makeRouter([new CatalogAdapter('openrouter', 'OR', [inkling])], cfg);
-    await expect(router.resolve({ modelClass: 'chat' })).rejects.toBeInstanceOf(ProviderNotConfiguredError);
+  it('filters out paid and gated entries during live OpenRouter catalog import', async () => {
+    const { fromOpenRouterApi } = await import('@nova/shared');
+    expect(
+      fromOpenRouterApi({
+        id: 'openai/gpt-5',
+        pricing: { prompt: '0.00001', completion: '0.00003' },
+        architecture: { input_modalities: ['text'], output_modalities: ['text'] },
+      }),
+    ).toBeNull();
+    expect(
+      fromOpenRouterApi({
+        id: 'thinkingmachines/inkling:free',
+        pricing: { prompt: '0', completion: '0' },
+        architecture: { input_modalities: ['text'], output_modalities: ['text'] },
+      }),
+    ).toBeNull();
   });
 
   it('never auto-selects a gated model', async () => {
@@ -124,9 +118,10 @@ describe('model resolution', () => {
     expect(res.model.provider).toBe('openrouter');
   });
 
-  it('prefers free-tier models over paid ones in the same class', async () => {
-    const paid = WORKERS_AI_MODELS.find((m) => m.freeTier === 'paid' && m.classes.includes('coding'))!;
-    const { router } = makeRouter([new CatalogAdapter('workers-ai', 'WAI', [paid, codingModel])]);
+  it('excludes paid models from inventory and selects free models', async () => {
+    const { router } = makeRouter([new CatalogAdapter('workers-ai', 'WAI', [paidModel, codingModel])]);
+    const inv = await router.inventory();
+    expect(inv.models.some((m) => m.id === paidModel.id)).toBe(false);
     const res = await router.resolve({ modelClass: 'coding' });
     expect(res.model.id).toBe(codingModel.id);
   });

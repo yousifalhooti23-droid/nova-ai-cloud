@@ -30,6 +30,16 @@ export async function bootstrap(opts: BootstrapOptions): Promise<{ app: ReturnTy
   const cfg = loadConfig(opts.env);
   const log = createLogger('nova', opts.logLevel ?? 'info');
 
+  // Allow Node / Desktop sidecar to use Cloudflare Workers AI cloud GPUs remotely when credentials are present.
+  const cfToken = typeof opts.env.CLOUDFLARE_API_TOKEN === 'string' ? opts.env.CLOUDFLARE_API_TOKEN.trim() : '';
+  const cfAccount = typeof opts.env.CLOUDFLARE_ACCOUNT_ID === 'string' ? opts.env.CLOUDFLARE_ACCOUNT_ID.trim() : '';
+  if (!opts.env.AI && cfToken && cfAccount) {
+    opts.env = {
+      ...opts.env,
+      AI: createRemoteCloudflareAiBinding(cfAccount, cfToken),
+    };
+  }
+
   let store = opts.store;
   if (!store) {
     if (opts.env.DB) {
@@ -91,4 +101,34 @@ export async function bootstrap(opts: BootstrapOptions): Promise<{ app: ReturnTy
     providers: router.providerInfos().map((p) => `${p.id}:${p.status}`).join(', '),
   });
   return { app, deps };
+}
+
+function createRemoteCloudflareAiBinding(accountId: string, apiToken: string) {
+  return {
+    isRemoteRest: true,
+    async run(model: string, params: Record<string, unknown>): Promise<unknown> {
+      const url = `https://api.cloudflare.com/client/v4/accounts/${encodeURIComponent(accountId)}/ai/run/${model}`;
+      const resp = await fetch(url, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${apiToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(params),
+      });
+      if (!resp.ok) {
+        const errText = await resp.text().catch(() => '');
+        throw new Error(`HTTP ${resp.status}: ${errText.slice(0, 300)}`);
+      }
+      if (params.stream === true && resp.body) {
+        return resp.body;
+      }
+      const ct = (resp.headers.get('content-type') ?? '').toLowerCase();
+      if (ct.startsWith('image/') || ct.includes('octet-stream')) {
+        return new Uint8Array(await resp.arrayBuffer());
+      }
+      const json = (await resp.json()) as { result?: unknown };
+      return json?.result ?? json;
+    },
+  };
 }

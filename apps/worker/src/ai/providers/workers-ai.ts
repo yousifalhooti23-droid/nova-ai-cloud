@@ -79,7 +79,7 @@ export class WorkersAiAdapter implements ProviderAdapter {
         simulated: false,
       };
     }
-    if (cfg.runtime === 'node') {
+    if (cfg.runtime === 'node' && !(ai as { isRemoteRest?: boolean }).isRemoteRest) {
       return { status: 'disabled', detail: 'Unavailable under the Node dev runtime (the AI binding only exists inside workerd).', simulated: false };
     }
     if (this.localModeDetected) {

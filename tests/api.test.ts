@@ -69,15 +69,14 @@ describe('health & models', () => {
     expect(body.providers[0].status).toBe('ready');
   });
 
-  it('GET /api/models lists the catalog plus which ids are callable', async () => {
+  it('GET /api/models lists only verified free open models plus which ids are callable', async () => {
     const body = (await json(await req('GET', Endpoints.models))) as never as import('@nova/shared').ModelsResponse & { availableModelIds: string[] };
-    expect(body.models.length).toBeGreaterThan(30);
+    expect(body.models.length).toBeGreaterThan(20);
     expect(body.availableModelIds).toEqual(['custom:test-model']);
     expect(body.catalogVerifiedAt).toBe('2026-10-30');
     expect(body.notes.join(' ')).toMatch(/10,000 Neurons/);
-    const paid = body.models.find((m) => m.id === 'workers-ai:glm-5.3')!;
-    expect(paid.freeTier).toBe('paid');
-    expect(paid.notes).toMatch(/Workers Paid/);
+    expect(body.models.every((m) => m.freeTier !== 'paid' && m.access === 'open')).toBe(true);
+    expect(body.models.find((m) => m.id === 'workers-ai:glm-5.3')).toBeUndefined();
   });
 
   it('reports every real provider as unconfigured when nothing is set (no fake readiness)', async () => {
