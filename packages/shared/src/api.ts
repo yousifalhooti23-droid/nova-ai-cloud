@@ -40,6 +40,7 @@ export const Endpoints = {
   memoryEntry: (id: string) => `${API_PREFIX}/memory/${id}`,
   usage: `${API_PREFIX}/usage`,
   settings: `${API_PREFIX}/settings`,
+  localProviderKeys: `${API_PREFIX}/settings/provider-keys`,
   providerKeys: `${API_PREFIX}/admin/provider-keys`,
 } as const;
 
@@ -49,6 +50,7 @@ export interface HealthResponse {
   ok: boolean;
   version: string;
   runtime: 'workers' | 'node';
+  authProtected?: boolean;
   store: { kind: 'd1' | 'json'; ready: boolean; detail: string };
   blob: { kind: 'r2' | 'file' | 'memory'; ready: boolean };
   sandbox: { kind: string; ready: boolean; detail: string };
@@ -301,6 +303,27 @@ export interface SettingsResponse {
 }
 
 export interface SettingsUpdateRequest extends Partial<SettingsResponse> {}
+
+export interface LocalProviderKeyStatus {
+  provider: ProviderId;
+  configured: boolean;
+  masked?: string;
+  baseUrl?: string;
+  source?: 'saved' | 'env' | 'runtime';
+}
+
+export interface LocalProviderKeysResponse {
+  writable: boolean;
+  persisted: boolean;
+  keys: LocalProviderKeyStatus[];
+}
+
+export interface LocalProviderKeyUpdateRequest {
+  provider: ProviderId;
+  apiKey?: string;
+  baseUrl?: string;
+  remove?: boolean;
+}
 
 export interface ApiError {
   error: string;

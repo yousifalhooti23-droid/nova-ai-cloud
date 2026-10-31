@@ -1,11 +1,12 @@
 import { memo, useState } from 'react';
 import type { ChatMessage } from '@nova/shared';
-import { AlertTriangle, Bot, Check, Copy, Paperclip, RefreshCw, User, Wrench } from 'lucide-react';
+import { AlertTriangle, Bot, Check, Copy, KeyRound, Paperclip, RefreshCw, User, Wrench } from 'lucide-react';
 import { useI18n } from '@/i18n';
 import { cn } from '@/lib/cn';
 import { formatNumber, prettyModelId, providerLabel, relativeTime } from '@/lib/format';
+import { useAppStore } from '@/store/app';
 import { Markdown } from './Markdown';
-import { Badge } from '@/components/ui';
+import { Badge, Button } from '@/components/ui';
 
 interface Props {
   message: ChatMessage;
@@ -68,15 +69,7 @@ export const MessageBubble = memo(function MessageBubble({
           {isTool ? (
             <ToolMessage message={message} />
           ) : failed ? (
-            <div className="flex items-start gap-2">
-              <AlertTriangle size={14} className="mt-0.5 shrink-0 text-danger" />
-              <div className="min-w-0">
-                <p className="text-[12.5px] font-medium text-danger">{message.error || t('chat.error')}</p>
-                {message.content ? (
-                  <p className="mt-1 whitespace-pre-wrap text-[12px] leading-relaxed text-muted">{message.content}</p>
-                ) : null}
-              </div>
-            </div>
+            <ErrorMessageContent message={message} />
           ) : (
             <>
               {reasoningText ? (
@@ -146,6 +139,46 @@ export const MessageBubble = memo(function MessageBubble({
     </div>
   );
 });
+
+function ErrorMessageContent({ message }: { message: ChatMessage }) {
+  const { t, locale } = useI18n();
+  const openSettings = useAppStore((s) => s.openSettings);
+  const raw = message.error || '';
+  const isProviderMissing = /No AI provider is configured/i.test(raw);
+  const isRateLimited = /rate limit reached|error 429/i.test(raw);
+  const displayError =
+    locale === 'ar'
+      ? isProviderMissing
+        ? t('chat.providerNotConfiguredFriendly')
+        : isRateLimited
+          ? t('chat.rateLimitedFriendly')
+          : raw || t('chat.error')
+      : raw || t('chat.error');
+
+  return (
+    <div className="flex items-start gap-2">
+      <AlertTriangle size={14} className="mt-0.5 shrink-0 text-danger" />
+      <div className="min-w-0">
+        <p className="whitespace-pre-wrap text-[12.5px] font-medium leading-relaxed text-danger">{displayError}</p>
+        {message.content ? (
+          <p className="mt-1 whitespace-pre-wrap text-[12px] leading-relaxed text-muted">{message.content}</p>
+        ) : null}
+        {isProviderMissing ? (
+          <div className="mt-2.5">
+            <Button
+              size="sm"
+              variant="outline"
+              icon={<KeyRound size={12} />}
+              onClick={() => openSettings(true, 'providers')}
+            >
+              {t('chat.openProvidersBtn')}
+            </Button>
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
+}
 
 function Avatar({ role }: { role: ChatMessage['role'] }) {
   const styles =

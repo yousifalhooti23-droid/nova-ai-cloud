@@ -23,7 +23,14 @@ import { fileURLToPath } from 'node:url';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const args = process.argv.slice(2);
 const targetIdx = args.indexOf('--target');
-const TARGET = targetIdx === -1 ? 'node20-linux-x64' : args[targetIdx + 1];
+const RAW_TARGET = targetIdx === -1 ? 'node22.23.4-linux-x64' : args[targetIdx + 1];
+const TARGET_ALIASES = {
+  'node20-win-x64': 'node22.23.4-win-x64',
+  'node22-win-x64': 'node22.23.4-win-x64',
+  'node20-linux-x64': 'node22.23.4-linux-x64',
+  'node22-linux-x64': 'node22.23.4-linux-x64',
+};
+const TARGET = TARGET_ALIASES[RAW_TARGET] ?? RAW_TARGET;
 const SKIP_PKG = args.includes('--skip-pkg');
 
 const DIST = path.join(root, 'apps/web/dist');
@@ -101,7 +108,7 @@ const pkgDynamicImportFix = {
     b.onLoad({ filter: /\.ts$/ }, async (a) => {
       const src = readFileSync(a.path, 'utf8');
       const out = src.replace(
-        /await\s+import\(\s*(['"])node:(fs|path|fs\/promises|os|child_process)\1\s*\)/g,
+        /await\s+import\(\s*(['"])node:(fs|path|fs\/promises|os|child_process|vm)\1\s*\)/g,
         (_m, q, mod) => `require(${q}node:${mod}${q})`,
       );
       return out === src ? null : { contents: out, loader: 'ts' };
@@ -113,7 +120,7 @@ await build({
   entryPoints: [path.join(root, 'apps/worker/src/standalone.ts')],
   bundle: true,
   platform: 'node',
-  target: 'node18',
+  target: 'node22',
   format: 'cjs',
   outfile: BUNDLE,
   minify: true,
@@ -130,9 +137,10 @@ if (SKIP_PKG) {
   console.log('⏭  --skip-pkg: left the CJS bundle un-packaged');
 } else {
   const out = path.join(OUT_DIR, EXE_NAME);
-   execFileSync(process.platform === 'win32' ? 'npx.cmd' : 'npx', ['--yes', '@yao-pkg/pkg', BUNDLE, '--targets', TARGET, '--output', out], {
+  execFileSync(process.platform === 'win32' ? 'npx.cmd' : 'npx', ['--yes', '@yao-pkg/pkg@6.24.0', BUNDLE, '--targets', TARGET, '--output', out], {
     stdio: 'inherit',
-    cwd: root, shell: true,
+    cwd: root,
+    shell: true,
   });
   const size = statSync(out).size;
   console.log(`✅ packaged → ${path.relative(root, out)} (${(size / 1024 / 1024).toFixed(1)} MB)`);

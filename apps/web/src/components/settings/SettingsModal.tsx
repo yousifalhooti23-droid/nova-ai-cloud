@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react';
-import type { ModelClass, ModelInfo, ProviderId } from '@nova/shared';
+import type { LocalProviderKeysResponse, ModelClass, ModelInfo, ProviderId } from '@nova/shared';
 import {
-  Activity, Bot, Cpu, Database, Globe, Info, KeyRound, RefreshCw, ShieldCheck, TerminalSquare,
+  Activity, Bot, Check, Cpu, Database, ExternalLink, Globe, Info, KeyRound, RefreshCw, ShieldCheck, TerminalSquare, Trash2,
 } from 'lucide-react';
 import { LOCALES, useI18n, type Locale } from '@/i18n';
 import { cn } from '@/lib/cn';
-import { api, describeApiError } from '@/lib/api';
+import { api, describeApiError, getStoredAccessToken, setStoredAccessToken } from '@/lib/api';
 import { useAppStore } from '@/store/app';
 import { useChatStore } from '@/store/chat';
 import { useCodeStore } from '@/store/code';
@@ -13,8 +13,6 @@ import { StatusBadge } from '@/components/chat/ModelPicker';
 import {
   Badge, Button, Dot, Field, Modal, Select, Spinner, Switch, TextArea, TextInput,
 } from '@/components/ui';
-
-type Tab = 'general' | 'providers' | 'agent' | 'storage';
 
 const PROVIDER_ORDER: ProviderId[] = ['workers-ai', 'openrouter', 'groq', 'custom', 'diagnostic'];
 
@@ -24,8 +22,8 @@ const NO_MODELS: ModelInfo[] = [];
 export function SettingsModal() {
   const { t } = useI18n();
   const open = useAppStore((s) => s.settingsOpen);
+  const tab = useAppStore((s) => s.settingsTab);
   const openSettings = useAppStore((s) => s.openSettings);
-  const [tab, setTab] = useState<Tab>('general');
 
   if (!open) return null;
 
@@ -40,10 +38,10 @@ export function SettingsModal() {
     >
       <div className="flex gap-4">
         <nav className="flex w-[150px] shrink-0 flex-col gap-0.5">
-          <TabButton active={tab === 'general'} onClick={() => setTab('general')} icon={<Globe size={13} />} label={t('settings.general')} />
-          <TabButton active={tab === 'providers'} onClick={() => setTab('providers')} icon={<Cpu size={13} />} label={t('settings.providers')} />
-          <TabButton active={tab === 'agent'} onClick={() => setTab('agent')} icon={<Bot size={13} />} label={t('settings.agent')} />
-          <TabButton active={tab === 'storage'} onClick={() => setTab('storage')} icon={<Database size={13} />} label={t('settings.storage')} />
+          <TabButton active={tab === 'general'} onClick={() => openSettings(true, 'general')} icon={<Globe size={13} />} label={t('settings.general')} />
+          <TabButton active={tab === 'providers'} onClick={() => openSettings(true, 'providers')} icon={<Cpu size={13} />} label={t('settings.providers')} />
+          <TabButton active={tab === 'agent'} onClick={() => openSettings(true, 'agent')} icon={<Bot size={13} />} label={t('settings.agent')} />
+          <TabButton active={tab === 'storage'} onClick={() => openSettings(true, 'storage')} icon={<Database size={13} />} label={t('settings.storage')} />
         </nav>
         <div className="min-w-0 flex-1">
           {tab === 'general' ? <GeneralTab /> : null}
@@ -195,10 +193,46 @@ function GeneralTab() {
 
       <Switch checked={editorWrap} onChange={(v) => patchPrefs({ editorWrap: v })} label={t('settings.lineWrap')} />
 
+      {health?.authProtected || getStoredAccessToken() ? (
+        <AccessTokenField />
+      ) : null}
+
       <p className="text-[11px] text-dim">
         {t('model.verified', { date: useAppStore.getState().models?.catalogVerifiedAt ?? '—' })}
       </p>
     </div>
+  );
+}
+
+function AccessTokenField() {
+  const { t } = useI18n();
+  const refreshHealth = useAppStore((s) => s.refreshHealth);
+  const refreshModels = useAppStore((s) => s.refreshModels);
+  const loadSettings = useAppStore((s) => s.loadSettings);
+  const toast = useAppStore((s) => s.toast);
+  const [token, setToken] = useState(() => getStoredAccessToken());
+
+  const apply = async () => {
+    setStoredAccessToken(token);
+    await Promise.all([refreshHealth(), refreshModels(), loadSettings()]);
+    toast({ kind: 'success', message: t('common.success') });
+  };
+
+  return (
+    <Field label={t('settings.accessToken')} hint={t('settings.accessTokenHint')}>
+      <div className="flex gap-2">
+        <TextInput
+          type="password"
+          value={token}
+          onChange={(e) => setToken(e.target.value)}
+          placeholder={t('settings.accessTokenPlaceholder')}
+          dir="ltr"
+        />
+        <Button size="sm" variant="outline" onClick={() => void apply()}>
+          {t('common.save')}
+        </Button>
+      </div>
+    </Field>
   );
 }
 
@@ -209,15 +243,90 @@ function ProvidersTab() {
   const health = useAppStore((s) => s.health);
   const models = useAppStore((s) => s.models);
   const refreshCatalog = useAppStore((s) => s.refreshCatalog);
+  const refreshHealth = useAppStore((s) => s.refreshHealth);
+  const refreshModels = useAppStore((s) => s.refreshModels);
   const probeWorkersAi = useAppStore((s) => s.probeWorkersAi);
   const probe = useAppStore((s) => s.probe);
-  const [busy, setBusy] = useState<'' | 'catalog' | 'probe'>('');
+  const toast = useAppStore((s) => s.toast);
+  const [busy, setBusy] = useState<'' | 'catalog' | 'probe' | ProviderId>('');
+  const [localKeys, setLocalKeys] = useState<LocalProviderKeysResponse | null>(null);
+  const [keyInputs, setKeyInputs] = useState<Record<string, string>>({});
+  const [baseUrlInput, setBaseUrlInput] = useState('');
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await api.getLocalProviderKeys();
+        if (!cancelled) {
+          setLocalKeys(res);
+          const customEntry = res.keys.find((k) => k.provider === 'custom');
+          if (customEntry?.baseUrl) setBaseUrlInput(customEntry.baseUrl);
+        }
+      } catch {
+        if (!cancelled) setLocalKeys(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const saveKey = async (provider: ProviderId) => {
+    const apiKey = (keyInputs[provider] ?? '').trim();
+    const baseUrl = provider === 'custom' ? baseUrlInput.trim() : undefined;
+    if (provider !== 'custom' && !apiKey) return;
+    if (provider === 'custom' && !baseUrl) return;
+    setBusy(provider);
+    try {
+      await api.saveLocalProviderKey({ provider, apiKey: apiKey || undefined, baseUrl });
+      setKeyInputs((prev) => ({ ...prev, [provider]: '' }));
+      const [updatedKeys] = await Promise.all([
+        api.getLocalProviderKeys().catch(() => null),
+        refreshHealth(),
+        refreshModels(),
+      ]);
+      if (updatedKeys) setLocalKeys(updatedKeys);
+      toast({ kind: 'success', message: t('providers.keySaved') });
+    } catch (err) {
+      toast({ kind: 'error', message: describeApiError(err).message });
+    } finally {
+      setBusy('');
+    }
+  };
+
+  const removeKey = async (provider: ProviderId) => {
+    setBusy(provider);
+    try {
+      await api.saveLocalProviderKey({ provider, remove: true });
+      if (provider === 'custom') setBaseUrlInput('');
+      const [updatedKeys] = await Promise.all([
+        api.getLocalProviderKeys().catch(() => null),
+        refreshHealth(),
+        refreshModels(),
+      ]);
+      if (updatedKeys) setLocalKeys(updatedKeys);
+      toast({ kind: 'info', message: t('providers.keyRemoved') });
+    } catch (err) {
+      toast({ kind: 'error', message: describeApiError(err).message });
+    } finally {
+      setBusy('');
+    }
+  };
 
   const providers = health?.providers ?? models?.providers ?? [];
   const ordered = PROVIDER_ORDER.map((id) => providers.find((p) => p.id === id)).filter(Boolean) as typeof providers;
 
   return (
     <div className="flex flex-col gap-3">
+      <div className="flex items-start gap-2 rounded-lg border border-success/30 bg-success/8 p-2.5">
+        <ShieldCheck size={15} className="mt-0.5 shrink-0 text-success" />
+        <div className="min-w-0 flex-1">
+          <p className="text-[12px] font-medium text-success">{t('providers.freeGuarantee')}</p>
+          <p className="mt-0.5 text-[11px] leading-relaxed text-muted">{t('providers.freeGuaranteeHint')}</p>
+        </div>
+      </div>
+
       <div className="flex items-center gap-2 rounded-lg border border-line bg-surface p-2.5">
         <KeyRound size={14} className="shrink-0 text-accent" />
         <p className="min-w-0 flex-1 text-[11.5px] leading-relaxed text-muted">{t('providers.keyHint')}</p>
@@ -239,6 +348,8 @@ function ProvidersTab() {
       <ul className="flex flex-col gap-2">
         {ordered.map((p) => {
           const count = models?.models.filter((m) => m.provider === p.id).length ?? p.modelCount;
+          const keyMeta = localKeys?.keys.find((k) => k.provider === p.id);
+          const canEditKey = Boolean(localKeys?.writable && (p.id === 'openrouter' || p.id === 'custom' || p.id === 'groq'));
           return (
             <li key={p.id} className="rounded-lg border border-line bg-surface p-2.5">
               <div className="flex flex-wrap items-center gap-2">
@@ -247,7 +358,11 @@ function ProvidersTab() {
                   {t(`providers.${p.id}` as never)}
                 </span>
                 <StatusBadge status={p.status} />
+                {p.id === 'openrouter' ? <Badge tone="success">{t('model.free')}</Badge> : null}
                 {p.simulated ? <Badge tone="warning">echo — {t('providers.diagnostic')}</Badge> : null}
+                {keyMeta?.masked ? (
+                  <Badge tone="neutral">{t('providers.savedMask', { mask: keyMeta.masked })}</Badge>
+                ) : null}
                 <span className="ms-auto text-[11px] text-dim">{t('providers.models', { n: count })}</span>
                 {p.id === 'workers-ai' ? (
                   <Button
@@ -267,10 +382,71 @@ function ProvidersTab() {
               </div>
               <p className="mt-1.5 text-[11.5px] leading-relaxed text-dim">{p.detail}</p>
               <p className="mt-1 text-[11px] leading-relaxed text-dim/80">{t(`providers.${p.id}.hint` as never)}</p>
-              {p.docsUrl ? (
+              {p.id === 'openrouter' ? (
+                <a
+                  href="https://openrouter.ai/settings/keys"
+                  target="_blank"
+                  rel="noreferrer noopener"
+                  className="mt-1.5 inline-flex items-center gap-1 text-[11.5px] font-medium text-accent underline"
+                >
+                  <ExternalLink size={11} />
+                  {t('providers.getFreeKey')}
+                </a>
+              ) : p.docsUrl ? (
                 <a href={p.docsUrl} target="_blank" rel="noreferrer noopener" className="mt-1 inline-block text-[11px] text-info underline">
                   {p.docsUrl}
                 </a>
+              ) : null}
+
+              {canEditKey ? (
+                <div className="mt-2.5 flex flex-col gap-2 border-t border-line pt-2.5">
+                  {p.id === 'custom' ? (
+                    <TextInput
+                      value={baseUrlInput}
+                      onChange={(e) => setBaseUrlInput(e.target.value)}
+                      placeholder={t('providers.baseUrlPlaceholder')}
+                      dir="ltr"
+                      className="font-mono !text-[11.5px]"
+                    />
+                  ) : null}
+                  <div className="flex flex-wrap items-center gap-2">
+                    <TextInput
+                      type="password"
+                      value={keyInputs[p.id] ?? ''}
+                      onChange={(e) => setKeyInputs((prev) => ({ ...prev, [p.id]: e.target.value }))}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          void saveKey(p.id);
+                        }
+                      }}
+                      placeholder={t('providers.keyInputPlaceholder')}
+                      dir="ltr"
+                      className="min-w-[200px] flex-1 font-mono !text-[11.5px]"
+                    />
+                    <Button
+                      size="sm"
+                      variant="primary"
+                      icon={<Check size={12} />}
+                      loading={busy === p.id}
+                      disabled={p.id === 'custom' ? !baseUrlInput.trim() : !(keyInputs[p.id] ?? '').trim()}
+                      onClick={() => void saveKey(p.id)}
+                    >
+                      {t('providers.saveKey')}
+                    </Button>
+                    {keyMeta?.configured ? (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        icon={<Trash2 size={12} />}
+                        loading={busy === p.id}
+                        onClick={() => void removeKey(p.id)}
+                      >
+                        {t('providers.removeKey')}
+                      </Button>
+                    ) : null}
+                  </div>
+                </div>
               ) : null}
             </li>
           );

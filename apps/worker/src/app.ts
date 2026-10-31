@@ -29,11 +29,29 @@ export function createApp(deps: AppDeps) {
     if (origin && (allowed.includes('*') || allowed.includes(origin))) {
       c.res.headers.set('access-control-allow-origin', origin);
       c.res.headers.set('access-control-allow-methods', 'GET,POST,PATCH,PUT,DELETE,OPTIONS');
-      c.res.headers.set('access-control-allow-headers', 'content-type,authorization,x-nova-admin');
+      c.res.headers.set('access-control-allow-headers', 'content-type,authorization,x-nova-admin,x-nova-token');
       c.res.headers.set('access-control-max-age', '86400');
       c.res.headers.set('vary', 'Origin');
     }
     if (c.req.method === 'OPTIONS') return c.body(null, 204);
+
+    // Optional zero-cost access token guard for public Cloudflare deployments.
+    if (deps.cfg.accessToken && c.req.path.startsWith('/api/') && c.req.path !== '/api/health') {
+      const provided =
+        c.req.header('x-nova-token') ??
+        c.req.header('authorization')?.replace(/^Bearer\s+/i, '');
+      if (provided !== deps.cfg.accessToken) {
+        return c.json(
+          {
+            error: 'Access token required.',
+            code: 'auth_required',
+            hint: 'Provide NOVA_ACCESS_TOKEN via the x-nova-token header or Settings.',
+          },
+          401,
+        );
+      }
+    }
+
     await next();
   });
 

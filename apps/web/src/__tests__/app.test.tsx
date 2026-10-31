@@ -39,6 +39,21 @@ function defaultRoutes(): Record<string, Handler> {
     'GET /api/sandbox/status': () => fx.sandboxStatus,
     'GET /api/settings': () => fx.settings,
     'PUT /api/settings': ({ body }) => ({ ...fx.settings, ...(body as object) }),
+    'GET /api/settings/provider-keys': () => ({
+      writable: true,
+      persisted: true,
+      keys: [
+        { provider: 'openrouter', configured: false },
+        { provider: 'custom', configured: false },
+        { provider: 'groq', configured: false },
+      ],
+    }),
+    'POST /api/settings/provider-keys': ({ body }) => ({
+      ok: true,
+      provider: body.provider,
+      masked: 'sk-o…1234',
+      persisted: true,
+    }),
     'GET /api/conversations': () => ({ conversations: [] }),
     'POST /api/conversations': () => ({ conversation: { ...fx.conversation, id: 'conv_new', messageCount: 0 } }),
     'GET /api/conversations/:id/messages': () => ({ messages: persistedMessages }),
@@ -68,7 +83,7 @@ function resetStores() {
   persistedMessages = [];
   useAppStore.setState({
     ready: false, health: null, models: null, sandbox: null, settings: null, probe: null,
-    toasts: [], settingsOpen: false, offline: false, lastError: null,
+    toasts: [], settingsOpen: false, settingsTab: 'general', offline: false, lastError: null,
     locale: 'ar', view: 'chat', sidebarCollapsed: false, editorFontSize: 13, editorWrap: false, diffMode: 'unified',
   });
   useChatStore.setState({
@@ -315,5 +330,28 @@ describe('NOVA web UI', () => {
     await waitFor(() => expect(useCodeStore.getState().agent.running).toBe(false));
     expect(useCodeStore.getState().agent.status).toBe('awaiting_approval');
     expect(api.bodyOf('/api/agent/run')).toMatchObject({ projectId: 'prj_1', prompt: 'غيّر القيمة إلى 43', autoApply: false });
+  });
+
+  it('saves a free OpenRouter key directly from Settings → Providers without touching .env', async () => {
+    api = installApiMock({
+      ...defaultRoutes(),
+      'GET /api/health': () => fx.health({ providers: [{ ...fx.workersAiProvider }, { ...fx.openrouterProvider }] }),
+    });
+
+    render(<App />);
+    const bannerBtn = await screen.findByRole('button', { name: 'المزوّدون' });
+    await userEvent.click(bannerBtn);
+
+    expect(await screen.findByText(/وضع مجاني 100%/)).toBeTruthy();
+    const inputs = await screen.findAllByPlaceholderText(/sk-or-v1/);
+    await userEvent.type(inputs[0], 'sk-or-v1-freekey9999');
+
+    const saveButtons = screen.getAllByRole('button', { name: /حفظ وتفعيل فوراً/ });
+    await userEvent.click(saveButtons[0]);
+
+    await waitFor(() => {
+      const call = api.callsTo('/api/settings/provider-keys').find((c) => c.method === 'POST');
+      expect(call?.body).toMatchObject({ provider: 'openrouter', apiKey: 'sk-or-v1-freekey9999' });
+    });
   });
 });

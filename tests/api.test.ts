@@ -275,6 +275,17 @@ describe('uploads, sandbox, tasks, memory, settings', () => {
     expect(body.warning).toMatch(/not sent to the model/);
   });
 
+  it('accepts image uploads cleanly without binary warnings for multimodal vision models', async () => {
+    const form = new FormData();
+    const fakePng = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+    form.append('file', new File([fakePng], 'screen.png', { type: 'image/png' }));
+    const res = await app.request(Endpoints.uploads, { method: 'POST', body: form });
+    expect(res.status).toBe(201);
+    const body = (await json(res)) as import('@nova/shared').UploadResponse;
+    expect(body.attachment.mime).toBe('image/png');
+    expect(body.warning).toBeUndefined();
+  });
+
   it('sandbox status is explicit about being disabled', async () => {
     const body = (await json(await req('GET', Endpoints.sandboxStatus))) as import('@nova/shared').SandboxStatusResponse;
     expect(body.kind).toBe('disabled');
@@ -449,5 +460,86 @@ describe('sandbox exec route (injected adapter)', () => {
     expect(body.kind).toBe('http');
     expect(body.ready).toBe(true);
     expect(body.isolationNotes.join(' ')).toMatch(/test double/);
+  });
+});
+
+describe('local UI provider keys & access token protection', () => {
+  it('saves, masks, activates and removes an OpenRouter key in local Node mode', async () => {
+    const fs = await import('node:fs');
+    const os = await import('node:os');
+    const path = await import('node:path');
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'nova-keys-'));
+    const envFile = path.join(tmpDir, 'nova.env');
+
+    try {
+      const boot = await bootstrap({
+        env: { NOVA_RUNTIME: 'node', NOVA_ENV_FILE: envFile } as never,
+        store: new JsonStore(),
+        blob: new MemoryBlobStore(),
+        logLevel: 'error',
+      });
+
+      const initial = (await json(await boot.app.request(Endpoints.localProviderKeys))) as import('@nova/shared').LocalProviderKeysResponse;
+      expect(initial.writable).toBe(true);
+      expect(initial.persisted).toBe(true);
+      expect(initial.keys.find((k) => k.provider === 'openrouter')?.configured).toBe(false);
+
+      // Cross-origin CSRF attempts must be rejected.
+      const csrf = await boot.app.request(Endpoints.localProviderKeys, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', origin: 'https://evil.example' },
+        body: JSON.stringify({ provider: 'openrouter', apiKey: 'sk-or-v1-secretkey123456' }),
+      });
+      expect(csrf.status).toBe(403);
+
+      // Save from loopback UI -> activates immediately AND persists to nova.env.
+      const saved = await boot.app.request(Endpoints.localProviderKeys, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', origin: 'http://127.0.0.1:8787' },
+        body: JSON.stringify({ provider: 'openrouter', apiKey: 'sk-or-v1-secretkey123456' }),
+      });
+      expect(saved.status).toBe(200);
+      const savedBody = await json(saved);
+      expect(savedBody.masked).not.toContain('secretkey');
+
+      const healthAfter = (await json(await boot.app.request(Endpoints.health))) as never as import('@nova/shared').HealthResponse;
+      expect(healthAfter.providers.find((p) => p.id === 'openrouter')?.status).toBe('ready');
+      expect(fs.readFileSync(envFile, 'utf8')).toContain('OPENROUTER_API_KEY=sk-or-v1-secretkey123456');
+
+      // Remove -> immediately disabled and scrubbed from nova.env.
+      const removed = await boot.app.request(Endpoints.localProviderKeys, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ provider: 'openrouter', remove: true }),
+      });
+      expect(removed.status).toBe(200);
+      const healthRemoved = (await json(await boot.app.request(Endpoints.health))) as never as import('@nova/shared').HealthResponse;
+      expect(healthRemoved.providers.find((p) => p.id === 'openrouter')?.status).toBe('missing-key');
+      expect(fs.readFileSync(envFile, 'utf8')).not.toContain('secretkey123456');
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
+  });
+
+  it('protects /api/* when NOVA_ACCESS_TOKEN is configured while keeping /api/health public', async () => {
+    const boot = await bootstrap({
+      env: { NOVA_RUNTIME: 'node', NOVA_ACCESS_TOKEN: 'my-free-cloud-secret' } as never,
+      store: new JsonStore(),
+      blob: new MemoryBlobStore(),
+      logLevel: 'error',
+    });
+
+    const health = (await json(await boot.app.request(Endpoints.health))) as never as import('@nova/shared').HealthResponse;
+    expect(health.ok).toBe(true);
+    expect(health.authProtected).toBe(true);
+
+    const denied = await boot.app.request(Endpoints.conversations);
+    expect(denied.status).toBe(401);
+    expect((await json(denied)).code).toBe('auth_required');
+
+    const allowed = await boot.app.request(Endpoints.conversations, {
+      headers: { 'x-nova-token': 'my-free-cloud-secret' },
+    });
+    expect(allowed.status).toBe(200);
   });
 });

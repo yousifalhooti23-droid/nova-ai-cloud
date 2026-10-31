@@ -186,7 +186,7 @@ export function ChatPage() {
         <div className="flex items-center gap-2 border-b border-warning/25 bg-warning/8 px-4 py-2">
           <AlertTriangle size={14} className="shrink-0 text-warning" />
           <p className="min-w-0 flex-1 text-[12px] text-warning">{t('chat.providerIssue')}</p>
-          <Button size="sm" variant="outline" onClick={() => openSettings(true)}>
+          <Button size="sm" variant="outline" onClick={() => openSettings(true, 'providers')}>
             {t('settings.providers')}
           </Button>
         </div>
@@ -196,9 +196,15 @@ export function ChatPage() {
         <div className="flex items-center gap-2 border-b border-danger/25 bg-danger/8 px-4 py-2">
           <AlertTriangle size={14} className="shrink-0 text-danger" />
           <p className="min-w-0 flex-1 truncate text-[12px] text-danger">
-            {streaming.error === 'network' ? t('error.network') : streaming.error}
+            {streaming.error === 'network'
+              ? t('error.network')
+              : locale === 'ar' && /No AI provider is configured/i.test(streaming.error)
+                ? t('chat.providerNotConfiguredFriendly')
+                : locale === 'ar' && /rate limit reached|error 429/i.test(streaming.error)
+                  ? t('chat.rateLimitedFriendly')
+                  : streaming.error}
           </p>
-          <Button size="sm" variant="ghost" onClick={() => openSettings(true)}>
+          <Button size="sm" variant="ghost" onClick={() => openSettings(true, 'providers')}>
             {t('nav.health')}
           </Button>
         </div>

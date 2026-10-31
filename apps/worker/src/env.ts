@@ -37,6 +37,10 @@ export interface NovaConfig {
   diagnosticEnabled: boolean;
   allowRuntimeKeys: boolean;
   adminToken?: string;
+  /** Optional shared secret protecting /api/* on public cloud deployments. */
+  accessToken?: string;
+  /** Writable env file path in local/desktop Node mode for UI key persistence. */
+  envFilePath?: string;
   sandbox: SandboxConfig;
   allowedOrigins: string[];
   maxUploadBytes: number;
@@ -140,6 +144,8 @@ export function loadConfig(env: RawEnv): NovaConfig {
     diagnosticEnabled: providers.diagnostic.enabled,
     allowRuntimeKeys: bool(read(env, 'NOVA_ALLOW_RUNTIME_KEYS'), false),
     adminToken: read(env, 'NOVA_ADMIN_TOKEN'),
+    accessToken: read(env, 'NOVA_ACCESS_TOKEN'),
+    envFilePath: read(env, 'NOVA_ENV_FILE'),
     sandbox: {
       kind: sandboxKind,
       url: read(env, 'NOVA_SANDBOX_URL'),
@@ -158,18 +164,26 @@ export function loadConfig(env: RawEnv): NovaConfig {
  * never returned by any endpoint. Restarting the Worker clears them.
  */
 export class RuntimeSecrets {
-  private map = new Map<ProviderId, { apiKey: string; baseUrl?: string }>();
-  set(provider: ProviderId, apiKey: string, baseUrl?: string) {
+  private map = new Map<ProviderId, { apiKey?: string; baseUrl?: string }>();
+  private removed = new Set<ProviderId>();
+  set(provider: ProviderId, apiKey?: string, baseUrl?: string) {
+    this.removed.delete(provider);
     this.map.set(provider, { apiKey, baseUrl });
   }
   get(provider: ProviderId) {
     return this.map.get(provider);
   }
+  isRemoved(provider: ProviderId) {
+    return this.removed.has(provider);
+  }
   delete(provider: ProviderId) {
     this.map.delete(provider);
+    this.removed.add(provider);
   }
-  list(): { provider: ProviderId; masked: string }[] {
-    return [...this.map.entries()].map(([provider, v]) => ({ provider, masked: maskSecret(v.apiKey) }));
+  list(): { provider: ProviderId; masked: string; baseUrl?: string }[] {
+    return [...this.map.entries()]
+      .filter(([, v]) => Boolean(v.apiKey || v.baseUrl))
+      .map(([provider, v]) => ({ provider, masked: v.apiKey ? maskSecret(v.apiKey) : '', baseUrl: v.baseUrl }));
   }
 }
 
@@ -178,18 +192,31 @@ export function maskSecret(value: string): string {
   return `${value.slice(0, 4)}…${value.slice(-4)}`;
 }
 
-/** Merge runtime-injected keys over the static config (static wins if runtime absent). */
+/** Merge runtime-injected keys over the static config (supports live updates & removals). */
 export function withRuntimeSecrets(cfg: NovaConfig, secrets: RuntimeSecrets): NovaConfig {
   const providers = { ...cfg.providers };
   for (const id of Object.keys(providers) as ProviderId[]) {
+    if (secrets.isRemoved(id)) {
+      providers[id] = {
+        ...providers[id],
+        apiKey: undefined,
+        baseUrl: id === 'custom' ? undefined : providers[id].baseUrl,
+        enabled: id === 'workers-ai' ? providers[id].enabled : false,
+        missing: id === 'custom' ? 'NOVA_CUSTOM_BASE_URL is not set.' : `${id.toUpperCase()}_API_KEY is not set.`,
+      };
+      continue;
+    }
     const injected = secrets.get(id);
     if (!injected) continue;
+    const nextKey = injected.apiKey ?? providers[id].apiKey;
+    const nextBase = injected.baseUrl ?? providers[id].baseUrl;
+    const enabled = id === 'workers-ai' ? providers[id].enabled : id === 'custom' ? Boolean(nextBase) : Boolean(nextKey);
     providers[id] = {
       ...providers[id],
-      apiKey: injected.apiKey,
-      baseUrl: injected.baseUrl ?? providers[id].baseUrl,
-      enabled: id === 'workers-ai' ? providers[id].enabled : true,
-      missing: undefined,
+      apiKey: nextKey,
+      baseUrl: nextBase,
+      enabled,
+      missing: enabled ? undefined : providers[id].missing,
     };
   }
   return { ...cfg, providers };

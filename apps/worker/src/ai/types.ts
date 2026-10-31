@@ -4,6 +4,8 @@ import type { NovaConfig } from '../env.js';
 export interface ChatTurn {
   role: Role;
   content: string;
+  /** Optional base64 data-URL images for multimodal vision turns. */
+  images?: { mime: string; dataUrl: string }[];
   /** Present on assistant turns that requested tools. */
   toolCalls?: ToolCallRequest[];
   /** Present on `tool` role turns. */

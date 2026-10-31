@@ -29,8 +29,8 @@
     "dev:sandbox-worker": "npm run dev --workspace @nova/sandbox-worker",
     "verify:openrouter": "node scripts/verify-openrouter.mjs",
     "probe:openrouter": "node scripts/probe-openrouter-free.mjs",
-    "desktop:sidecar": "node scripts/build-sidecar.mjs --target node20-win-x64",
-    "desktop:sidecar:linux": "node scripts/build-sidecar.mjs --target node20-linux-x64",
+    "desktop:sidecar": "node scripts/build-sidecar.mjs --target node22-win-x64",
+    "desktop:sidecar:linux": "node scripts/build-sidecar.mjs --target node22-linux-x64",
     "desktop:icons": "npm run icon --workspace @nova/desktop"
   },
   "devDependencies": {

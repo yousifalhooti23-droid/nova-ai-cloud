@@ -1,15 +1,16 @@
 # NOVA AI Cloud — Windows desktop build + REAL Windows test
 # ==========================================================
-# Job 1 (checks)      : ubuntu    — typecheck + the 121-test suite (guards the repo)
-# Job 2 (build)       : windows   — web dist -> sidecar exe -> Tauri NSIS installer
+# Job 1 (checks)      : ubuntu    — typecheck + full Vitest suite (guards the repo)
+# Job 2 (build)       : windows   — web dist -> sidecar exe -> Tauri NSIS installer + Portable ZIP
 # Job 3 (test-install): windows   — SILENT-INSTALLS the produced Setup.exe inside a
 #                                   real Windows runner and asserts shortcuts, files,
 #                                   the sidecar health endpoint, that the app window
-#                                   spawns its server, then UNINSTALLS and verifies.
+#                                   spawns its server without polluting install dir,
+#                                   then UNINSTALLS and verifies complete cleanup.
 #
 # Nothing here pretends: if an assertion fails on Windows, the pipeline fails.
 #
-# Artifacts: NOVA-AI-Cloud-Setup.exe (NSIS installer) + NOVA-AI-Cloud-Portable.exe
+# Artifacts: NOVA-AI-Cloud-Setup.exe (NSIS installer) + NOVA-AI-Cloud-Portable.zip
 
 name: desktop-windows
 
@@ -21,6 +22,7 @@ on:
       - "apps/**"
       - "packages/**"
       - "scripts/**"
+      - "tests/**"
       - ".github/workflows/desktop-windows.yml"
 
 concurrency:
@@ -48,7 +50,7 @@ jobs:
 
   # ----------------------------------------------------------------- 2. build
   build:
-    name: build NSIS installer (windows x64)
+    name: build NSIS installer + Portable (windows x64)
     runs-on: windows-latest
     needs: checks
     timeout-minutes: 45
@@ -67,7 +69,7 @@ jobs:
         run: npm run build
 
       - name: build the sidecar server (single exe, embeds the UI)
-        run: node scripts/build-sidecar.mjs --target node20-win-x64
+        run: node scripts/build-sidecar.mjs --target node22-win-x64
 
       - name: sidecar sanity checks (on Windows, before packaging)
         shell: pwsh
@@ -77,18 +79,19 @@ jobs:
           $size = (Get-Item $exe).Length
           Write-Host "sidecar size: $([math]::Round($size/1MB,1)) MB"
           if ($size -lt 10MB) { throw "sidecar exe suspiciously small ($size bytes)" }
-          # run it and prove it serves on Windows
           $env:PORT = "8911"; $env:HOST = "127.0.0.1"
+          $env:NOVA_DATA_DIR = Join-Path $env:RUNNER_TEMP "nova-build-probe"
           $p = Start-Process -FilePath $exe -PassThru -RedirectStandardOutput sidecar.out -RedirectStandardError sidecar.err
           $ok = $false
           for ($i = 0; $i -lt 40; $i++) {
             Start-Sleep -Milliseconds 500
             try {
-              $r = Invoke-WebRequest -Uri "http://127.0.0.1:8911/api/health" -UseBasicParsing -TimeoutSec 3
+              $r = Invoke-WebRequest -Uri "http://127.0.0.1:8911/api/health" -TimeoutSec 3
               if ($r.StatusCode -eq 200 -and $r.Content -match '"ok":true') { $ok = $true; break }
             } catch { }
           }
           Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
+          Remove-Item Env:\PORT, Env:\HOST, Env:\NOVA_DATA_DIR -ErrorAction SilentlyContinue
           if (-not $ok) {
             Get-Content sidecar.err -ErrorAction SilentlyContinue | Select-Object -First 20
             throw "sidecar did not become healthy on Windows"
@@ -102,12 +105,11 @@ jobs:
         run: |
           if (-not $env:OPENROUTER_API_KEY) {
             Write-Host "⏭  OPENROUTER_API_KEY secret not set — skipping the live model assertion."
-            Write-Host "   Add it under repo Settings → Secrets and variables → Actions to enable it."
             exit 0
           }
-          # the sidecar inherits the process environment, so the key needs no file
           $exe = "apps/desktop/src-tauri/sidecar/nova-server.exe"
           $env:PORT = "8913"; $env:HOST = "127.0.0.1"
+          $env:NOVA_DATA_DIR = Join-Path $env:RUNNER_TEMP "nova-ai-probe"
           $env:NOVA_PROVIDER_PRIORITY = "openrouter,custom"
           $p = Start-Process -FilePath $exe -WorkingDirectory (Get-Location) -PassThru -RedirectStandardError sidecar2.err
           $body = '{"message":"Reply with exactly: CI-AI-OK"}'
@@ -116,12 +118,13 @@ jobs:
             Start-Sleep -Milliseconds 500
             try {
               $r = Invoke-WebRequest -Uri "http://127.0.0.1:8913/api/chat" -Method POST -Body $body `
-                     -ContentType "application/json" -UseBasicParsing -TimeoutSec 90
+                     -ContentType "application/json" -TimeoutSec 90
               $answer = $r.Content
               break
             } catch { }
           }
           Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
+          Remove-Item Env:\PORT, Env:\HOST, Env:\NOVA_DATA_DIR, Env:\NOVA_PROVIDER_PRIORITY -ErrorAction SilentlyContinue
           if ($answer -notmatch "CI-AI-OK") {
             Get-Content sidecar2.err -ErrorAction SilentlyContinue | Select-Object -First 20
             throw "the Windows sidecar did not return a real model answer"
@@ -133,7 +136,7 @@ jobs:
         with:
           workspaces: apps/desktop/src-tauri
 
-      - name: build Tauri bundles (nsis + portable)
+      - name: build Tauri NSIS bundle
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -141,22 +144,33 @@ jobs:
           projectPath: apps/desktop
           args: --bundles nsis --target x86_64-pc-windows-msvc
 
-      - name: rename to the promised file names + verify bundle contents
+      - name: assemble Setup.exe + Portable.zip + verify bundle contents
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
           New-Item -ItemType Directory -Force -Path dist-out | Out-Null
-          $nsis = Get-ChildItem "apps/desktop/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*.exe" | Select-Object -First 1
+          $relDir = "apps/desktop/src-tauri/target/x86_64-pc-windows-msvc/release"
+          $nsis = Get-ChildItem "$relDir/bundle/nsis/*.exe" | Select-Object -First 1
           if (-not $nsis) { throw "no NSIS installer produced" }
           Copy-Item $nsis.FullName "dist-out/NOVA-AI-Cloud-Setup.exe"
-          $port = Get-ChildItem "apps/desktop/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/portable/*.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
-          if ($port) { Copy-Item $port.FullName "dist-out/NOVA-AI-Cloud-Portable.exe" }
 
-          # --- required-file checks (requirement: add checks for the build) ---
+          # Build genuine self-contained Portable ZIP (Tauri v2 has no built-in portable bundler)
+          $shellExe = Join-Path $relDir "nova-ai-cloud.exe"
+          if (-not (Test-Path $shellExe)) { throw "release binary missing: $shellExe" }
+          $portStage = "portable-stage/NOVA-AI-Cloud-Portable"
+          New-Item -ItemType Directory -Force -Path "$portStage/sidecar" | Out-Null
+          Copy-Item $shellExe "$portStage/NOVA AI Cloud.exe"
+          Copy-Item "apps/desktop/src-tauri/sidecar/nova-server.exe" "$portStage/sidecar/nova-server.exe"
+          Set-Content -Path "$portStage/portable.marker" -Value "portable=1" -Encoding UTF8
+          Compress-Archive -Path "$portStage/*" -DestinationPath "dist-out/NOVA-AI-Cloud-Portable.zip" -Force
+
+          # --- required-file checks ---
           $setup = Get-Item "dist-out/NOVA-AI-Cloud-Setup.exe"
-          Write-Host ("installer: {0} ({1} MB)" -f $setup.Name, [math]::Round($setup.Length/1MB,1))
+          $portZip = Get-Item "dist-out/NOVA-AI-Cloud-Portable.zip"
+          Write-Host ("installer : {0} ({1} MB)" -f $setup.Name, [math]::Round($setup.Length/1MB,1))
+          Write-Host ("portable  : {0} ({1} MB)" -f $portZip.Name, [math]::Round($portZip.Length/1MB,1))
           if ($setup.Length -lt 8MB) { throw "installer too small — sidecar or UI probably not bundled" }
-          # the installer is a PE executable
+          if ($portZip.Length -lt 8MB) { throw "portable zip too small" }
           $bytes = [System.IO.File]::ReadAllBytes($setup.FullName)[0..1]
           if (-not ($bytes[0] -eq 0x4D -and $bytes[1] -eq 0x5A)) { throw "installer is not a valid PE (MZ) executable" }
           foreach ($f in @(
@@ -169,7 +183,9 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: NOVA-Windows-x64
-          path: dist-out/*.exe
+          path: |
+            dist-out/*.exe
+            dist-out/*.zip
           if-no-files-found: error
           retention-days: 30
 
@@ -190,7 +206,18 @@ jobs:
         run: |
           $ErrorActionPreference = "Stop"
           $setup = "dist-out/NOVA-AI-Cloud-Setup.exe"
-          if (-not (Test-Path $setup)) { throw "artifact missing" }
+          $portZip = "dist-out/NOVA-AI-Cloud-Portable.zip"
+          if (-not (Test-Path $setup)) { throw "Setup.exe artifact missing" }
+          if (-not (Test-Path $portZip)) { throw "Portable.zip artifact missing" }
+
+          Write-Host "== verify Portable.zip contents =="
+          $portCheck = Join-Path $env:RUNNER_TEMP "nova-portable-check"
+          Expand-Archive -Path $portZip -DestinationPath $portCheck -Force
+          if (-not (Test-Path "$portCheck/NOVA AI Cloud.exe")) { throw "Portable main exe missing" }
+          if (-not (Test-Path "$portCheck/sidecar/nova-server.exe")) { throw "Portable sidecar exe missing" }
+          if (-not (Test-Path "$portCheck/portable.marker")) { throw "Portable marker missing" }
+          Remove-Item -Recurse -Force $portCheck -ErrorAction SilentlyContinue
+          Write-Host "  ✅ Portable.zip verified"
 
           Write-Host "== silent install (/S) =="
           $p = Start-Process -FilePath $setup -ArgumentList "/S" -Wait -PassThru
@@ -228,16 +255,18 @@ jobs:
 
           Write-Host "== sidecar runs on Windows (health) =="
           $env:PORT = "8912"; $env:HOST = "127.0.0.1"
+          $env:NOVA_DATA_DIR = Join-Path $env:RUNNER_TEMP "nova-sc-health"
           $sc = Start-Process -FilePath (Join-Path $loc $scRel) -PassThru
           $healthy = $false
           for ($i = 0; $i -lt 40; $i++) {
             Start-Sleep -Milliseconds 500
             try {
-              $r = Invoke-WebRequest -Uri "http://127.0.0.1:8912/api/health" -UseBasicParsing -TimeoutSec 3
+              $r = Invoke-WebRequest -Uri "http://127.0.0.1:8912/api/health" -TimeoutSec 3
               if ($r.StatusCode -eq 200) { $healthy = $true; break }
             } catch { }
           }
           Stop-Process -Id $sc.Id -Force -ErrorAction SilentlyContinue
+          Remove-Item Env:\PORT, Env:\HOST, Env:\NOVA_DATA_DIR -ErrorAction SilentlyContinue
           if (-not $healthy) { throw "installed sidecar never became healthy" }
           Write-Host "  ✅ installed sidecar serves /api/health"
 
@@ -249,7 +278,7 @@ jobs:
           for ($i = 0; $i -lt 60; $i++) {
             Start-Sleep -Milliseconds 500
             try {
-              $r = Invoke-WebRequest -Uri "http://127.0.0.1:8787/api/health" -UseBasicParsing -TimeoutSec 2
+              $r = Invoke-WebRequest -Uri "http://127.0.0.1:8787/api/health" -TimeoutSec 2
               if ($r.StatusCode -eq 200) { $sawServer = $true; break }
             } catch { }
           }
@@ -257,9 +286,11 @@ jobs:
           Write-Host "  app process alive: $appAlive"
           Write-Host "  app spawned server on 8787: $sawServer"
           Get-Process | Where-Object { $_.Name -like "*nova*" -or $_.Name -like "*NOVA*" } | Stop-Process -Force -ErrorAction SilentlyContinue
+          Start-Sleep -Seconds 1
           if (-not $appAlive) { throw "app process exited immediately after launch" }
           if (-not $sawServer) { throw "app launched but never spawned its sidecar server" }
-          Write-Host "  ✅ desktop app runs and owns its backend"
+          if (Test-Path (Join-Path $loc "sidecar\nova-data")) { throw "sidecar polluted install folder instead of using %APPDATA%" }
+          Write-Host "  ✅ desktop app runs, owns its backend, and stores data in %APPDATA%"
 
           Write-Host "== uninstall =="
           $unRaw = $entry.UninstallString
@@ -269,10 +300,14 @@ jobs:
           Start-Process -FilePath $unExe -ArgumentList $unArgs -Wait
           Start-Sleep -Seconds 3
           if (Test-Path (Join-Path $loc $scRel)) { throw "uninstall left the sidecar behind in $loc" }
-          if (Test-Path (Join-Path $loc "sidecar")) { throw "uninstall left the sidecar folder behind in $loc" }
+          if (Test-Path (Join-Path $loc "sidecar")) {
+            Get-ChildItem (Join-Path $loc "sidecar") -Recurse | ForEach-Object { Write-Host "   leftover: $($_.FullName)" }
+            throw "uninstall left the sidecar folder behind in $loc"
+          }
           if (Test-Path $desktopLnk) { throw "uninstall left the desktop shortcut" }
           if (Test-Path $startDir) { throw "uninstall left the start menu folder" }
-          Write-Host "  ✅ uninstaller removed files and shortcuts"
+          Remove-Item -Recurse -Force (Join-Path $env:APPDATA "NOVA AI Cloud") -ErrorAction SilentlyContinue
+          Write-Host "  ✅ uninstaller removed files and shortcuts cleanly"
 
           Write-Host ""
-          Write-Host "✅ REAL WINDOWS VERIFICATION PASSED (install → shortcuts → run → server → uninstall)"
+          Write-Host "✅ REAL WINDOWS VERIFICATION PASSED (portable → install → shortcuts → run → server → uninstall)"

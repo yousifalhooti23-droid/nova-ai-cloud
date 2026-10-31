@@ -9,12 +9,43 @@ import type {
   AgentRun, AgentRunDetailResponse, AgentRunRequest, ApplyAllResponse, AttachmentRef,
   ChangeActionRequest, ChatRequest, Commit, CommitRequest, Conversation, ConversationCreateRequest,
   ConversationPatchRequest, FileChange, FileResponse, FileWriteRequest, HealthResponse,
+  LocalProviderKeysResponse, LocalProviderKeyUpdateRequest,
   MemoryCreateRequest, MemoryEntry, MemoryResponse, ModelClass, ModelsRefreshResponse,
   ModelsResponse, Project, ProjectCreateRequest, ProviderId, SandboxExecRequest,
   SandboxExecResponse, SandboxStatusResponse, SearchRequest, SearchResponse,
   SettingsResponse, SettingsUpdateRequest, Task, TaskCreateRequest, UsageResponse,
 } from '@nova/shared';
 import { Endpoints } from '@nova/shared';
+
+const ACCESS_TOKEN_KEY = 'nova.access.token';
+
+export function getStoredAccessToken(): string {
+  try {
+    return localStorage.getItem(ACCESS_TOKEN_KEY) ?? '';
+  } catch {
+    return '';
+  }
+}
+
+export function setStoredAccessToken(token: string) {
+  try {
+    const clean = token.trim();
+    if (clean) localStorage.setItem(ACCESS_TOKEN_KEY, clean);
+    else localStorage.removeItem(ACCESS_TOKEN_KEY);
+  } catch {
+    /* ignore storage errors */
+  }
+}
+
+function authHeaders(extra?: HeadersInit): Record<string, string> {
+  const out: Record<string, string> = {};
+  if (extra) {
+    for (const [k, v] of Object.entries(extra as Record<string, string>)) out[k] = v;
+  }
+  const tok = getStoredAccessToken();
+  if (tok) out['x-nova-token'] = tok;
+  return out;
+}
 
 export class ApiRequestError extends Error {
   readonly status: number;
@@ -37,7 +68,7 @@ export class ApiRequestError extends Error {
 async function http<T>(path: string, init?: RequestInit): Promise<T> {
   let res: Response;
   try {
-    res = await fetch(path, init);
+    res = await fetch(path, { ...init, headers: authHeaders(init?.headers) });
   } catch (err) {
     throw new ApiRequestError(0, {
       error: 'network',
@@ -149,7 +180,7 @@ export const api = {
   chatBody(body: ChatRequest): { url: string; init: RequestInit } {
     return {
       url: Endpoints.chat,
-      init: { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) },
+      init: { method: 'POST', headers: authHeaders({ 'content-type': 'application/json' }), body: JSON.stringify(body) },
     };
   },
 
@@ -213,7 +244,7 @@ export const api = {
   agentBody(body: AgentRunRequest): { url: string; init: RequestInit } {
     return {
       url: Endpoints.agentRun,
-      init: { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) },
+      init: { method: 'POST', headers: authHeaders({ 'content-type': 'application/json' }), body: JSON.stringify(body) },
     };
   },
   listRuns: (projectId?: string | null) =>
@@ -253,6 +284,13 @@ export const api = {
   usage: (limit = 100) => json<UsageResponse>(`${Endpoints.usage}?limit=${limit}`, 'GET'),
   getSettings: () => json<SettingsResponse>(Endpoints.settings, 'GET'),
   updateSettings: (body: SettingsUpdateRequest) => json<SettingsResponse>(Endpoints.settings, 'PUT', body),
+  getLocalProviderKeys: () => json<LocalProviderKeysResponse>(Endpoints.localProviderKeys, 'GET'),
+  saveLocalProviderKey: (body: LocalProviderKeyUpdateRequest) =>
+    json<{ ok: boolean; provider: ProviderId; masked?: string; baseUrl?: string; removed?: boolean; persisted?: boolean }>(
+      Endpoints.localProviderKeys,
+      'POST',
+      body,
+    ),
 };
 
 /** Narrow an unknown error into something the UI can render. */

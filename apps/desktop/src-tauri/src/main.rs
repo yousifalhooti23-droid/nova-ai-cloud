@@ -2,10 +2,11 @@
 // =============================
 // Tauri does NOT run our backend by itself (requirement: never assume that).
 // This shell:
-//   1. spawns the Nova sidecar server (shipped as a bundled resource),
+//   1. spawns the Nova sidecar server (shipped as a bundled resource, hidden window),
 //   2. waits until http://127.0.0.1:8787/api/health answers,
 //   3. only then opens the window pointing at that local server,
-//   4. kills the sidecar when the app exits.
+//   4. checks passively for signed GitHub Release updates in the background,
+//   5. kills the sidecar when the app exits.
 //
 // AI models are never embedded: the sidecar calls OpenRouter / Cloudflare over
 // the network, exactly like the web version does.
@@ -14,11 +15,17 @@
 
 use std::io::{Read, Write};
 use std::net::{SocketAddr, TcpStream};
+#[cfg(windows)]
+use std::os::windows::process::CommandExt;
 use std::path::PathBuf;
 use std::process::{Child, Command};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 use tauri::{Manager, RunEvent, WebviewUrl, WebviewWindowBuilder};
+use tauri_plugin_updater::UpdaterExt;
+
+#[cfg(windows)]
+const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
 /// Loopback port for the sidecar. Override with NOVA_PORT if 8787 is taken.
 fn port() -> u16 {
@@ -28,7 +35,7 @@ fn port() -> u16 {
         .unwrap_or(8787)
 }
 
-const HEALTH_TIMEOUT: Duration = Duration::from_secs(10);
+const HEALTH_TIMEOUT: Duration = Duration::from_secs(12);
 
 struct Sidecar(Mutex<Option<Child>>);
 
@@ -57,11 +64,13 @@ fn find_sidecar(app: &tauri::AppHandle) -> Option<PathBuf> {
 }
 
 fn spawn_sidecar(path: &PathBuf) -> Option<Child> {
-    Command::new(path)
-        .env("PORT", port().to_string())
+    let mut cmd = Command::new(path);
+    cmd.env("PORT", port().to_string())
         .env("HOST", "127.0.0.1")
-        .spawn()
-        .ok()
+        .env("NOVA_DESKTOP", "1");
+    #[cfg(windows)]
+    cmd.creation_flags(CREATE_NO_WINDOW);
+    cmd.spawn().ok()
 }
 
 /// Plain-TCP health probe: avoids pulling an HTTP client into the shell.
@@ -125,6 +134,21 @@ fn main() {
             .min_inner_size(960.0, 640.0)
             .center()
             .build()?;
+
+            // Non-blocking background updater check (no-op until a signed release exists).
+            let updater_handle = handle.clone();
+            tauri::async_runtime::spawn(async move {
+                if let Ok(updater) = updater_handle.updater() {
+                    match updater.check().await {
+                        Ok(Some(update)) => {
+                            eprintln!("[nova-shell] installing update {}", update.version);
+                            let _ = update.download_and_install(|_, _| {}, || {}).await;
+                        }
+                        Ok(None) => eprintln!("[nova-shell] no update available"),
+                        Err(err) => eprintln!("[nova-shell] update check skipped: {err}"),
+                    }
+                }
+            });
 
             Ok(())
         })

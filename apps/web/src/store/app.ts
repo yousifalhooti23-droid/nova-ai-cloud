@@ -58,6 +58,7 @@ interface AppState extends Prefs {
   probe: ProbeResponse | null;
   toasts: Toast[];
   settingsOpen: boolean;
+  settingsTab: 'general' | 'providers' | 'agent' | 'storage';
   offline: boolean;
   loadSandbox: () => Promise<void>;
   loadSettings: () => Promise<void>;
@@ -72,7 +73,7 @@ interface AppState extends Prefs {
   setLocale: (locale: Locale) => Promise<void>;
   setView: (view: View) => void;
   toggleSidebar: () => void;
-  openSettings: (open?: boolean) => void;
+  openSettings: (open?: boolean, tab?: 'general' | 'providers' | 'agent' | 'storage') => void;
   toast: (t: Omit<Toast, 'id'>) => void;
   dismissToast: (id: string) => void;
 }
@@ -89,6 +90,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   probe: null,
   toasts: [],
   settingsOpen: false,
+  settingsTab: 'general',
   offline: false,
   lastError: null,
 
@@ -169,8 +171,8 @@ export const useAppStore = create<AppState>((set, get) => ({
     get().patchPrefs({ sidebarCollapsed: !get().sidebarCollapsed });
   },
 
-  openSettings(open = true) {
-    set({ settingsOpen: open });
+  openSettings(open = true, tab) {
+    set((s) => ({ settingsOpen: open, settingsTab: tab ?? s.settingsTab }));
   },
 
   toast(t) {

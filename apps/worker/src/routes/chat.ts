@@ -108,14 +108,48 @@ export function registerChatRoutes(app: Hono<AppEnv>) {
           if (m.status === 'error' && !m.content) continue;
           messages.push({ role: m.role, content: truncate(m.content, 12_000) });
         }
-        messages.push({ role: 'user', content: withAttachments(req.message, req.attachments ?? []) });
+        const userTurn: ChatTurn = { role: 'user', content: withAttachments(req.message, req.attachments ?? []) };
+        messages.push(userTurn);
+
+        const imageRefs = (req.attachments ?? []).filter((a) => /^image\/(png|jpe?g|webp|gif)$/i.test(a.mime));
 
         // Resolve the model first so the client knows what is answering
         // (and sees any fallback warnings) before a single token arrives.
-        const resolution = await d.router.resolve({
-          modelId: req.modelId ?? conversation!.modelId,
-          modelClass: req.modelClass ?? conversation!.modelClass ?? 'chat',
-        });
+        let resolution: Awaited<ReturnType<typeof d.router.resolve>>;
+        if (imageRefs.length > 0 && !req.modelId) {
+          try {
+            resolution = await d.router.resolve({
+              modelId: conversation!.modelId,
+              modelClass: req.modelClass ?? conversation!.modelClass ?? 'chat',
+              requireVision: true,
+            });
+          } catch {
+            resolution = await d.router.resolve({
+              modelId: conversation!.modelId,
+              modelClass: req.modelClass ?? conversation!.modelClass ?? 'chat',
+            });
+          }
+        } else {
+          resolution = await d.router.resolve({
+            modelId: req.modelId ?? conversation!.modelId,
+            modelClass: req.modelClass ?? conversation!.modelClass ?? 'chat',
+          });
+        }
+
+        if (imageRefs.length > 0 && resolution.model.supportsVision) {
+          const images: { mime: string; dataUrl: string }[] = [];
+          for (const ref of imageRefs.slice(0, 4)) {
+            const rec = await d.store.getAttachment(ref.id);
+            if (!rec) continue;
+            const blob = await d.blob.get(rec.blobKey);
+            if (!blob || blob.size > 6 * 1024 * 1024) continue;
+            const b64 = bytesToBase64(blob.data);
+            images.push({ mime: rec.mime, dataUrl: `data:${rec.mime};base64,${b64}` });
+          }
+          if (images.length > 0) userTurn.images = images;
+        } else if (imageRefs.length > 0) {
+          resolution.warnings.push('Selected model does not support image input; attached images were not sent as pixels.');
+        }
         emit({
           type: 'ready',
           requestId: c.get('requestId'),
@@ -203,4 +237,13 @@ function withAttachments(message: string, attachments: ChatRequest['attachments'
   if (textual.length === 0) return message;
   const parts = textual.map((a) => `\n\n--- attached file: ${a.name} (${a.mime}, ${a.size} bytes) ---\n${truncate(a.text!, 40_000)}`);
   return `${message}${parts.join('')}`;
+}
+
+function bytesToBase64(bytes: Uint8Array): string {
+  let binary = '';
+  const chunk = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunk) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunk));
+  }
+  return btoa(binary);
 }

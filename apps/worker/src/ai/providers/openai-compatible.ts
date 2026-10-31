@@ -50,7 +50,14 @@ export class OpenAiCompatibleAdapter implements ProviderAdapter {
     const body: Record<string, unknown> = {
       model: req.model.upstreamId,
       messages: req.messages.map((m) => {
-        const out: Record<string, unknown> = { role: m.role, content: m.content ?? '' };
+        const useVision = Boolean(req.model.supportsVision && m.images?.length && m.role === 'user');
+        const contentValue: unknown = useVision
+          ? [
+              ...(m.content ? [{ type: 'text', text: m.content }] : []),
+              ...m.images!.map((img) => ({ type: 'image_url', image_url: { url: img.dataUrl } })),
+            ]
+          : (m.content ?? '');
+        const out: Record<string, unknown> = { role: m.role, content: contentValue };
         if (m.toolCalls?.length) {
           out.tool_calls = m.toolCalls.map((tc) => ({
             id: tc.id,

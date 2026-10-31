@@ -17,6 +17,7 @@ function envFromProcess(): RawEnv {
   const env: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(process.env)) if (v !== undefined) env[k] = v;
   env.NOVA_RUNTIME = 'node';
+  if (!env.NOVA_ENV_FILE) env.NOVA_ENV_FILE = '.env';
   return env as RawEnv;
 }
 

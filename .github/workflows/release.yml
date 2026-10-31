@@ -7,7 +7,7 @@
 #   TAURI_SIGNING_PRIVATE_KEY_PASSWORD  (the password chosen when the key was generated)
 #
 # Produces a GitHub Release containing:
-#   NOVA-AI-Cloud-Setup.exe, NOVA-AI-Cloud-Portable.exe,
+#   NOVA-AI-Cloud-Setup.exe, NOVA-AI-Cloud-Portable.zip,
 #   the signed updater bundle (.nsis.zip + .sig) and latest.json
 # Installed apps read latest.json to self-update (passive mode).
 
@@ -32,14 +32,14 @@ jobs:
 
       - run: npm ci --no-audit --no-fund
       - run: npm run build
-      - run: node scripts/build-sidecar.mjs --target node20-win-x64
+      - run: node scripts/build-sidecar.mjs --target node22-win-x64
 
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: apps/desktop/src-tauri
 
-      - name: build + sign (nsis, portable, updater artifacts)
+      - name: build + sign (nsis + updater artifacts)
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -48,10 +48,10 @@ jobs:
         with:
           projectPath: apps/desktop
           args: >-
-            --bundles nsis,portable --target x86_64-pc-windows-msvc
+            --bundles nsis --target x86_64-pc-windows-msvc
             --config {"bundle":{"createUpdaterArtifacts":"v1Compatible"}}
 
-      - name: collect artifacts + assemble latest.json
+      - name: collect artifacts + Portable.zip + assemble latest.json
         id: pack
         shell: pwsh
         run: |
@@ -59,16 +59,26 @@ jobs:
           $ver = (Get-Content apps/desktop/src-tauri/tauri.conf.json | ConvertFrom-Json).version
           New-Item -ItemType Directory -Force -Path dist-out | Out-Null
 
-          $bundle = "apps/desktop/src-tauri/target/x86_64-pc-windows-msvc/release/bundle"
+          $relDir = "apps/desktop/src-tauri/target/x86_64-pc-windows-msvc/release"
+          $bundle = "$relDir/bundle"
           $nsis   = Get-ChildItem "$bundle/nsis/*.exe"      | Select-Object -First 1
-          $port   = Get-ChildItem "$bundle/portable/*.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
           $upZip  = Get-ChildItem "$bundle/nsis/*.nsis.zip"     -ErrorAction SilentlyContinue | Select-Object -First 1
           $upSig  = Get-ChildItem "$bundle/nsis/*.nsis.zip.sig" -ErrorAction SilentlyContinue | Select-Object -First 1
 
           Copy-Item $nsis.FullName "dist-out/NOVA-AI-Cloud-Setup.exe"
-          if ($port)  { Copy-Item $port.FullName  "dist-out/NOVA-AI-Cloud-Portable.exe" }
           if ($upZip) { Copy-Item $upZip.FullName "dist-out/" }
           if ($upSig) { Copy-Item $upSig.FullName "dist-out/" }
+
+          # Assemble Portable ZIP
+          $shellExe = Join-Path $relDir "nova-ai-cloud.exe"
+          if (Test-Path $shellExe) {
+            $portStage = "portable-stage/NOVA-AI-Cloud-Portable"
+            New-Item -ItemType Directory -Force -Path "$portStage/sidecar" | Out-Null
+            Copy-Item $shellExe "$portStage/NOVA AI Cloud.exe"
+            Copy-Item "apps/desktop/src-tauri/sidecar/nova-server.exe" "$portStage/sidecar/nova-server.exe"
+            Set-Content -Path "$portStage/portable.marker" -Value "portable=1" -Encoding UTF8
+            Compress-Archive -Path "$portStage/*" -DestinationPath "dist-out/NOVA-AI-Cloud-Portable.zip" -Force
+          }
 
           if ($upZip -and $upSig) {
             $sig  = (Get-Content $upSig.FullName -Raw).Trim()
