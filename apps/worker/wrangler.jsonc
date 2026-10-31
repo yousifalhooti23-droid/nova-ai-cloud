@@ -18,7 +18,7 @@
     {
       "binding": "DB",
       "database_name": "nova-db",
-      "database_id": "REPLACE_WITH_REAL_D1_ID",
+      "database_id": "4080be28-e832-45bc-a9c6-93b2e06cd5f4",
       "migrations_dir": "migrations"
     }
   ],
