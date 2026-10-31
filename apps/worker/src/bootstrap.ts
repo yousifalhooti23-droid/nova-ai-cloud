@@ -4,7 +4,7 @@ import { GitService } from './agent/git.js';
 import { loadConfig, RuntimeSecrets, type RawEnv } from './env.js';
 import { createLogger } from './lib/log.js';
 import { createSandbox } from './sandbox/index.js';
-import { FileBlobStore, MemoryBlobStore, R2BlobStore, type BlobStore } from './storage/blob.js';
+import { D1BlobStore, FileBlobStore, MemoryBlobStore, R2BlobStore, type BlobStore } from './storage/blob.js';
 import { D1Store } from './storage/d1-store.js';
 import { JsonStore } from './storage/json-store.js';
 import type { AppDeps } from './context.js';
@@ -47,6 +47,7 @@ export async function bootstrap(opts: BootstrapOptions): Promise<{ app: ReturnTy
   let blob = opts.blob;
   if (!blob) {
     if (opts.env.FILES) blob = new R2BlobStore(opts.env.FILES as never);
+    else if (opts.env.DB) blob = new D1BlobStore(opts.env.DB as never);
     else if (cfg.runtime === 'node') blob = new FileBlobStore(`${cfg.dataDir}/blobs`);
     else blob = new MemoryBlobStore();
   }

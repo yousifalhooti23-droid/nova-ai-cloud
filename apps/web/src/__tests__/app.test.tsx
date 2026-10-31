@@ -89,7 +89,7 @@ function resetStores() {
   useChatStore.setState({
     conversations: [], activeId: null, messages: {}, loadingList: false, loadingMessages: false,
     streaming: { ...emptyStreaming },
-    composer: { modelId: null, modelClass: 'chat', temperature: 0.7, systemPrompt: '', attachments: [], uploading: false },
+    composer: { modelId: null, modelClass: 'chat', studioMode: 'chat', temperature: 0.7, systemPrompt: '', attachments: [], uploading: false },
     lastError: null,
   });
   useCodeStore.setState({
@@ -353,5 +353,35 @@ describe('NOVA web UI', () => {
       const call = api.callsTo('/api/settings/provider-keys').find((c) => c.method === 'POST');
       expect(call?.body).toMatchObject({ provider: 'openrouter', apiKey: 'sk-or-v1-freekey9999' });
     });
+  });
+
+  it('renders an interactive Live Website Preview iframe when the assistant generates an HTML website', async () => {
+    const siteHtml = '```html\n<!DOCTYPE html><html lang="ar" dir="rtl"><head><title>قهوة نوفا</title></head><body><h1>مرحباً بكم في قهوة نوفا</h1><p>أفضل قهوة مختصة</p></body></html>\n```';
+    api = installApiMock({
+      ...defaultRoutes(),
+      'GET /api/conversations': () => ({ conversations: [fx.conversation] }),
+      'GET /api/conversations/:id/messages': () => ({
+        messages: [
+          {
+            id: 'msg_site_1',
+            conversationId: fx.conversation.id,
+            role: 'assistant',
+            content: siteHtml,
+            status: 'complete',
+            modelId: 'nova-coder',
+            createdAt: '2026-10-30T10:00:00.000Z',
+          },
+        ],
+      }),
+    });
+
+    render(<App />);
+    const convBtn = await screen.findByText(fx.conversation.title);
+    await userEvent.click(convBtn);
+
+    expect(await screen.findByText('معاينة حية للموقع')).toBeTruthy();
+    const iframe = screen.getByTitle('NOVA Live Website Preview') as HTMLIFrameElement;
+    expect(iframe).toBeTruthy();
+    expect(iframe.getAttribute('srcdoc')).toContain('قهوة نوفا');
   });
 });

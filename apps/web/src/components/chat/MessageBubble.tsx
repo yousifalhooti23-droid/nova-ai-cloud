@@ -4,6 +4,7 @@ import { AlertTriangle, Bot, Check, Copy, KeyRound, Paperclip, RefreshCw, User, 
 import { useI18n } from '@/i18n';
 import { cn } from '@/lib/cn';
 import { formatNumber, prettyModelId, providerLabel, relativeTime } from '@/lib/format';
+import { authMediaUrl, isImageMime, isVideoMime } from '@/lib/media';
 import { useAppStore } from '@/store/app';
 import { Markdown } from './Markdown';
 import { Badge, Button } from '@/components/ui';
@@ -82,7 +83,7 @@ export const MessageBubble = memo(function MessageBubble({
                 isUser ? (
                   <p className="whitespace-pre-wrap break-words text-[13.5px] leading-relaxed">{body}</p>
                 ) : (
-                  <Markdown content={body} copyLabel={t('common.copy')} copiedLabel={t('common.copied')} />
+                  <Markdown content={body} copyLabel={t('common.copy')} copiedLabel={t('common.copied')} isStreaming={isStreaming} />
                 )
               ) : isStreaming ? (
                 <span className="inline-flex items-center gap-1 text-[12px] text-dim">
@@ -95,14 +96,46 @@ export const MessageBubble = memo(function MessageBubble({
           )}
 
           {message.attachments?.length ? (
-            <div className="mt-2 flex flex-wrap gap-1.5 border-t border-line pt-2">
-              {message.attachments.map((a) => (
-                <span key={a.id} className="chip !py-1">
-                  <Paperclip size={11} />
-                  <span className="max-w-[180px] truncate">{a.name}</span>
-                  <span className="text-dim">{formatNumber(a.size)}B</span>
-                </span>
-              ))}
+            <div className="mt-2 flex flex-col gap-2 border-t border-line pt-2">
+              <div className="flex flex-wrap gap-2">
+                {message.attachments
+                  .filter((a) => !/-frame-\d+\.jpg$/i.test(a.name))
+                  .map((a) => {
+                    const mediaSrc = authMediaUrl(a.url);
+                    if (isImageMime(a.mime, a.name) && mediaSrc) {
+                      return (
+                        <a
+                          key={a.id}
+                          href={mediaSrc}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="block overflow-hidden rounded-lg border border-line bg-black/30"
+                        >
+                          <img src={mediaSrc} alt={a.name} className="max-h-48 max-w-[260px] object-cover" loading="lazy" />
+                        </a>
+                      );
+                    }
+                    if (isVideoMime(a.mime, a.name) && mediaSrc) {
+                      return (
+                        <div key={a.id} className="overflow-hidden rounded-lg border border-line bg-black">
+                          <video
+                            src={mediaSrc}
+                            controls
+                            preload="metadata"
+                            className="max-h-56 max-w-[320px]"
+                          />
+                        </div>
+                      );
+                    }
+                    return (
+                      <span key={a.id} className="chip !py-1">
+                        <Paperclip size={11} />
+                        <span className="max-w-[180px] truncate">{a.name}</span>
+                        <span className="text-dim">{formatNumber(a.size)}B</span>
+                      </span>
+                    );
+                  })}
+              </div>
             </div>
           ) : null}
         </div>

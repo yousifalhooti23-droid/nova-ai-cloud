@@ -1,7 +1,8 @@
 import { create } from 'zustand';
-import type { ChatMessage, Conversation, ModelClass, ProviderId, ServerEvent } from '@nova/shared';
+import type { ChatMessage, Conversation, ModelClass, ProviderId, ServerEvent, StudioMode } from '@nova/shared';
 import { newId } from '@nova/shared';
 import { api, describeApiError, type UploadResult } from '@/lib/api';
+import { extractVideoKeyframes, isVideoMime } from '@/lib/media';
 import { streamRequest, type StreamHandle } from '@/lib/sse';
 
 export interface StreamingState {
@@ -22,6 +23,7 @@ export interface ComposerState {
   /** null = let the Model Router decide (recommended default). */
   modelId: string | null;
   modelClass: ModelClass;
+  studioMode: StudioMode;
   temperature: number;
   systemPrompt: string;
   attachments: UploadResult[];
@@ -62,7 +64,7 @@ interface ChatState {
   setComposer: (patch: Partial<ComposerState>) => void;
   addAttachment: (file: File, projectId?: string | null) => Promise<void>;
   removeAttachment: (id: string) => void;
-  send: (text: string, projectId?: string | null) => Promise<void>;
+  send: (text: string, projectId?: string | null, studioModeOverride?: StudioMode) => Promise<void>;
   stop: () => void;
   regenerate: (projectId?: string | null) => Promise<void>;
   reset: () => void;
@@ -78,7 +80,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   loadingList: false,
   loadingMessages: false,
   streaming: emptyStreaming,
-  composer: { modelId: null, modelClass: 'chat', temperature: 0.7, systemPrompt: '', attachments: [], uploading: false },
+  composer: { modelId: null, modelClass: 'chat', studioMode: 'chat', temperature: 0.7, systemPrompt: '', attachments: [], uploading: false },
   lastError: null,
 
   async loadConversations(projectId) {
@@ -174,9 +176,21 @@ export const useChatStore = create<ChatState>((set, get) => ({
   async addAttachment(file, projectId) {
     set((s) => ({ composer: { ...s.composer, uploading: true } }));
     try {
-      const result = await api.upload(file, projectId);
+      const uploaded: UploadResult[] = [];
+      const main = await api.upload(file, projectId);
+      uploaded.push(main);
+      if (isVideoMime(file.type, file.name)) {
+        const frames = await extractVideoKeyframes(file, 3);
+        for (const frame of frames) {
+          try {
+            uploaded.push(await api.upload(frame, projectId));
+          } catch {
+            /* frame extraction/upload is best-effort */
+          }
+        }
+      }
       set((s) => ({
-        composer: { ...s.composer, uploading: false, attachments: [...s.composer.attachments, result] },
+        composer: { ...s.composer, uploading: false, attachments: [...s.composer.attachments, ...uploaded] },
       }));
     } catch (err) {
       set((s) => ({ composer: { ...s.composer, uploading: false }, lastError: describeApiError(err) }));
@@ -189,11 +203,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }));
   },
 
-  async send(text, projectId) {
-    const trimmed = text.trim();
-    if (!trimmed || get().streaming.active) return;
-
+  async send(text, projectId, studioModeOverride) {
     const composer = get().composer;
+    const trimmed = text.trim();
+    if ((!trimmed && composer.attachments.length === 0) || get().streaming.active) return;
+    const finalMessage = trimmed || 'حلل واشرح الوسائط المرفقة بالتفصيل.';
+    const activeStudioMode = studioModeOverride ?? composer.studioMode;
+
     let conversationId = get().activeId;
     const isLocalPlaceholder = !conversationId || conversationId.startsWith('conv_local');
     if (isLocalPlaceholder) {
@@ -221,7 +237,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       id: newId('msg_local'),
       conversationId: targetId,
       role: 'user',
-      content: trimmed,
+      content: finalMessage,
       attachments: composer.attachments.map((a) => ({ id: a.id, name: a.name, mime: a.mime, size: a.size, url: a.url })),
       status: 'complete',
       createdAt: new Date().toISOString(),
@@ -235,9 +251,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const { url, init } = api.chatBody({
       conversationId: targetId,
       projectId: projectId ?? null,
-      message: trimmed,
+      message: finalMessage,
       modelId: composer.modelId,
       modelClass: composer.modelClass,
+      studioMode: activeStudioMode !== 'chat' ? activeStudioMode : undefined,
       temperature: composer.temperature,
       systemPrompt: composer.systemPrompt || undefined,
       attachments: composer.attachments.map((a) => ({ id: a.id, name: a.name, mime: a.mime, size: a.size, url: a.url })),
@@ -253,7 +270,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     // Server is the source of truth for persisted messages.
     await get().reloadMessages(targetId);
     void get().loadConversations(projectId);
-    set((s) => ({ composer: { ...s.composer, attachments: [] } }));
+    set((s) => ({ composer: { ...s.composer, attachments: [], studioMode: 'chat' } }));
   },
 
   stop() {

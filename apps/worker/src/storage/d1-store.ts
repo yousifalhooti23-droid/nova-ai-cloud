@@ -45,8 +45,20 @@ export class D1Store implements Store {
 
   async init(): Promise<void> {
     // Schema is created by migrations (`wrangler d1 migrations apply`).
-    // This probe makes startup failures explicit instead of surfacing later.
-    await this.db.prepare('SELECT 1 AS ok').first();
+    // Ensure cardless blob chunks table exists even on older D1 databases.
+    await this.db
+      .prepare(
+        `CREATE TABLE IF NOT EXISTS uploaded_blob_chunks (
+           blob_key     TEXT NOT NULL,
+           chunk_idx    INTEGER NOT NULL,
+           content_type TEXT NOT NULL DEFAULT 'application/octet-stream',
+           total_size   INTEGER NOT NULL DEFAULT 0,
+           data_b64     TEXT NOT NULL,
+           created_at   TEXT NOT NULL,
+           PRIMARY KEY (blob_key, chunk_idx)
+         )`,
+      )
+      .run();
   }
 
   /* ------------------------------------------------------- conversations */

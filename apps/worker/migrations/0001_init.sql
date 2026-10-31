@@ -181,3 +181,14 @@ CREATE TABLE IF NOT EXISTS catalog_cache (
   data         TEXT NOT NULL,
   verified_at  TEXT NOT NULL
 );
+
+-- Cardless free-tier binary storage in D1 (chunked at 512 KB to stay well under D1's 1 MB SQL statement limit).
+CREATE TABLE IF NOT EXISTS uploaded_blob_chunks (
+  blob_key     TEXT NOT NULL,
+  chunk_idx    INTEGER NOT NULL,
+  content_type TEXT NOT NULL DEFAULT 'application/octet-stream',
+  total_size   INTEGER NOT NULL DEFAULT 0,
+  data_b64     TEXT NOT NULL,
+  created_at   TEXT NOT NULL,
+  PRIMARY KEY (blob_key, chunk_idx)
+);

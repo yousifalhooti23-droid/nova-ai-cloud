@@ -88,14 +88,24 @@ function renderTree(entries: { path: string; sizeBytes?: number }[]): string {
 }
 
 /** System prompt for plain chat (no tools). */
-export function buildChatSystemPrompt(opts: { locale?: 'ar' | 'en'; memory?: MemoryEntry[]; project?: Project | null } = {}): string {
+export function buildChatSystemPrompt(opts: {
+  locale?: 'ar' | 'en';
+  memory?: MemoryEntry[];
+  project?: Project | null;
+  studioMode?: 'chat' | 'image' | 'video' | 'website' | null;
+} = {}): string {
   const parts = [
-    'You are NOVA, a precise, senior-level AI assistant in a personal cloud platform.',
+    'You are NOVA, a precise, senior-level AI assistant and creative cloud studio.',
     'Answer in the language the user writes in (Arabic or English). Keep code, identifiers and commands in English.',
     'Use Markdown. Put every code sample in a fenced block with a language tag.',
     'Be concrete and correct. If you are unsure, say so — never invent APIs, file contents or command output.',
-    'Prefer short, dense answers; expand only when asked.',
+    'When the user asks to build, design, or create a website, web page, store, game, or dashboard, output ONE complete, modern, responsive, self-contained HTML5 document inside a single ```html fenced block using <script src="https://cdn.tailwindcss.com"></script>, Google Fonts (Cairo/Tajawal for Arabic with dir="rtl"), rich gradients/cards, and working interactive JavaScript so it runs immediately in NOVA\'s Live Website Preview.',
   ];
+  if (opts.studioMode === 'website') {
+    parts.push(
+      'WEBSITE STUDIO MODE ACTIVE: You MUST build a complete, production-grade, visually impressive single-file HTML5 website inside one ```html code block. Include navigation, hero section, interactive features/forms/modals with real working JS, mobile responsiveness, and dir="rtl" with Arabic typography whenever the prompt is in Arabic.',
+    );
+  }
   if (opts.project) parts.push(`Current project context: ${opts.project.name}${opts.project.description ? ` — ${opts.project.description}` : ''}.`);
   if (opts.memory?.length) {
     parts.push(`Remembered facts:\n${opts.memory.map((m) => `- ${m.key}: ${truncate(m.content, 300)}`).join('\n')}`);

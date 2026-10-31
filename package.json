@@ -24,6 +24,7 @@
     "db:migrate:local": "npm run db:migrate:local --workspace @nova/worker",
     "db:migrate:remote": "npm run db:migrate:remote --workspace @nova/worker",
     "deploy": "npm run build && npm run deploy --workspace @nova/worker",
+    "deploy:cloudflare": "node scripts/deploy-cloudflare.mjs",
     "smoke": "node scripts/smoke.mjs",
     "sandbox:selftest": "node scripts/sandbox-selftest.mjs",
     "dev:sandbox-worker": "npm run dev --workspace @nova/sandbox-worker",

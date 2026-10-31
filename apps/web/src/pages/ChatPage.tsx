@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { ChatMessage } from '@nova/shared';
 import {
-  AlertTriangle, ArrowDown, Brain, FolderKanban, Lightbulb, Link2, MessageSquare, Pencil,
-  Sparkles, Trash2, Unlink, X,
+  AlertTriangle, ArrowDown, Brain, Film, FolderKanban, Globe, Image as ImageIcon,
+  Lightbulb, Link2, MessageSquare, Pencil, Sparkles, Trash2, Unlink, X,
 } from 'lucide-react';
 import { useI18n } from '@/i18n';
 import { cn } from '@/lib/cn';
@@ -27,6 +27,7 @@ export function ChatPage() {
   const loadingMessages = useChatStore((s) => s.loadingMessages);
   const streaming = useChatStore((s) => s.streaming);
   const send = useChatStore((s) => s.send);
+  const setComposer = useChatStore((s) => s.setComposer);
   const regenerate = useChatStore((s) => s.regenerate);
   const patchConversation = useChatStore((s) => s.patchConversation);
   const renameConversation = useChatStore((s) => s.renameConversation);
@@ -219,7 +220,36 @@ export function ChatPage() {
             </div>
             <h2 className="text-center text-[19px] font-semibold tracking-tight">{t('chat.emptyTitle')}</h2>
             <p className="mt-1.5 max-w-md text-center text-[12.5px] leading-relaxed text-dim">{t('chat.emptyHint')}</p>
-            <div className="mt-6 grid w-full max-w-xl grid-cols-1 gap-2 sm:grid-cols-2">
+
+            {/* Quick Creative Studio Launchers */}
+            <div className="mt-5 grid w-full max-w-xl grid-cols-1 gap-2 sm:grid-cols-3">
+              <button
+                type="button"
+                onClick={() => setComposer({ studioMode: 'image' })}
+                className="card-hover flex items-center gap-2 rounded-xl border border-accent/25 bg-accent/5 px-3 py-2.5 text-start text-[12.5px] font-medium text-text"
+              >
+                <ImageIcon size={15} className="shrink-0 text-accent" />
+                <span>{t('studio.mode.image')}</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setComposer({ studioMode: 'video' })}
+                className="card-hover flex items-center gap-2 rounded-xl border border-accent/25 bg-accent/5 px-3 py-2.5 text-start text-[12.5px] font-medium text-text"
+              >
+                <Film size={15} className="shrink-0 text-accent" />
+                <span>{t('studio.mode.video')}</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setComposer({ studioMode: 'website' })}
+                className="card-hover flex items-center gap-2 rounded-xl border border-accent/25 bg-accent/5 px-3 py-2.5 text-start text-[12.5px] font-medium text-text"
+              >
+                <Globe size={15} className="shrink-0 text-accent" />
+                <span>{t('studio.mode.website')}</span>
+              </button>
+            </div>
+
+            <div className="mt-3 grid w-full max-w-xl grid-cols-1 gap-2 sm:grid-cols-2">
               {suggestions.map((s) => (
                 <button
                   key={s}

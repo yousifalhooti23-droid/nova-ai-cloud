@@ -42,7 +42,11 @@ export const Endpoints = {
   settings: `${API_PREFIX}/settings`,
   localProviderKeys: `${API_PREFIX}/settings/provider-keys`,
   providerKeys: `${API_PREFIX}/admin/provider-keys`,
+  studioImage: `${API_PREFIX}/studio/image`,
+  studioVideo: `${API_PREFIX}/studio/video`,
 } as const;
+
+export type StudioMode = 'chat' | 'image' | 'video' | 'website';
 
 /* --------------------------------------------------------------- health */
 
@@ -52,7 +56,7 @@ export interface HealthResponse {
   runtime: 'workers' | 'node';
   authProtected?: boolean;
   store: { kind: 'd1' | 'json'; ready: boolean; detail: string };
-  blob: { kind: 'r2' | 'file' | 'memory'; ready: boolean };
+  blob: { kind: 'r2' | 'd1' | 'file' | 'memory'; ready: boolean };
   sandbox: { kind: string; ready: boolean; detail: string };
   providers: ProviderInfo[];
   time: ISODate;
@@ -92,6 +96,45 @@ export interface ChatRequest {
   systemPrompt?: string;
   /** Ask the router for a tool-calling model and expose the tool list. */
   enableTools?: boolean;
+  /** Optional creative studio mode (image generation, multi-scene video, live website). */
+  studioMode?: StudioMode;
+}
+
+export interface StudioImageRequest {
+  prompt: string;
+  width?: number;
+  height?: number;
+  conversationId?: string | null;
+  projectId?: string | null;
+}
+
+export interface StudioImageResponse {
+  attachment: AttachmentRef;
+  promptUsed: string;
+  provider: string;
+  markdown: string;
+}
+
+export interface StudioVideoScene {
+  imageUrl: string;
+  attachmentId: string;
+  caption: string;
+  durationSec: number;
+  motion: 'zoom-in' | 'zoom-out' | 'pan-left' | 'pan-right';
+}
+
+export interface StudioVideoRequest {
+  prompt: string;
+  locale?: 'ar' | 'en';
+  conversationId?: string | null;
+  projectId?: string | null;
+}
+
+export interface StudioVideoResponse {
+  title: string;
+  scenes: StudioVideoScene[];
+  provider: string;
+  markdown: string;
 }
 
 export interface ConversationCreateRequest {

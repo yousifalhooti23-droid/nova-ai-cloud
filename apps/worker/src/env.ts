@@ -153,7 +153,7 @@ export function loadConfig(env: RawEnv): NovaConfig {
       timeoutMs: Number(read(env, 'NOVA_SANDBOX_TIMEOUT_MS') ?? 20000),
     },
     allowedOrigins: list(read(env, 'NOVA_ALLOWED_ORIGINS'), []),
-    maxUploadBytes: Number(read(env, 'NOVA_MAX_UPLOAD_BYTES') ?? 8 * 1024 * 1024),
+    maxUploadBytes: Number(read(env, 'NOVA_MAX_UPLOAD_BYTES') ?? 25 * 1024 * 1024),
     dataDir: read(env, 'NOVA_DATA_DIR') ?? './.nova-data',
   };
 }

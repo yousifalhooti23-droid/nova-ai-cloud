@@ -7,6 +7,7 @@ import { badRequest, describeError, HttpError } from '../lib/errors.js';
 import { sseResponse } from '../lib/sse.js';
 import { buildChatSystemPrompt } from '../agent/prompts.js';
 import { runAgent } from '../agent/loop.js';
+import { detectStudioIntent, generateCloudImage, generateCloudVideo } from './studio.js';
 
 /** Read-only tool set for project-aware chat (no mutations, ever). */
 const CHAT_TOOLS = ['list_files', 'read_file', 'search_project', 'read_memory', 'git_status', 'git_log'];
@@ -22,8 +23,15 @@ export function registerChatRoutes(app: Hono<AppEnv>) {
     const d = c.get('deps');
     const req = (await c.req.json().catch(() => null)) as ChatRequest | null;
     if (!req) throw badRequest('JSON body is required', 'bad_body');
-    if (typeof req.message !== 'string' || !req.message.trim()) throw badRequest('message is required', 'bad_message');
-    if (req.message.length > 200_000) throw badRequest('message is too long (max 200,000 characters)', 'too_long');
+    const hasAttachments = Array.isArray(req.attachments) && req.attachments.length > 0;
+    const effectiveMessage =
+      typeof req.message === 'string' && req.message.trim()
+        ? req.message
+        : hasAttachments
+          ? 'حلل واشرح الوسائط المرفقة بالتفصيل.'
+          : '';
+    if (!effectiveMessage) throw badRequest('message is required', 'bad_message');
+    if (effectiveMessage.length > 200_000) throw badRequest('message is too long (max 200,000 characters)', 'too_long');
 
     // Resolve (or create) the conversation before streaming starts.
     let conversation = req.conversationId ? await d.store.getConversation(req.conversationId) : null;
@@ -33,7 +41,7 @@ export function registerChatRoutes(app: Hono<AppEnv>) {
         projectId: req.projectId ?? null,
         modelId: req.modelId ?? null,
         modelClass: req.modelClass ?? 'chat',
-        title: truncate(req.message.replace(/\s+/g, ' ').trim(), 60),
+        title: truncate(effectiveMessage.replace(/\s+/g, ' ').trim(), 60),
       });
     }
     const conversationId = conversation.id;
@@ -45,7 +53,7 @@ export function registerChatRoutes(app: Hono<AppEnv>) {
       id: userMessageId,
       conversationId,
       role: 'user',
-      content: req.message,
+      content: effectiveMessage,
       attachments: req.attachments ?? [],
       status: 'complete',
       modelId: req.modelId ?? conversation.modelId ?? undefined,
@@ -93,6 +101,40 @@ export function registerChatRoutes(app: Hono<AppEnv>) {
     return sseResponse(async (emit, signal) => {
       const assistantMessageId = newId('msg');
       try {
+        const studioIntent = !hasAttachments ? detectStudioIntent(effectiveMessage, req.studioMode) : req.studioMode === 'website' ? 'website' : null;
+
+        // Direct Cloud GPU Image / Video Studio Generation ($0 free)
+        if (studioIntent === 'image' || studioIntent === 'video') {
+          const studioModelId = studioIntent === 'image' ? 'nova-studio/cloud-image' : 'nova-studio/cloud-video';
+          emit({
+            type: 'ready',
+            requestId: c.get('requestId'),
+            modelId: studioModelId,
+            provider: 'workers-ai',
+            warnings: [],
+          });
+          emit({ type: 'message.start', messageId: assistantMessageId, modelId: studioModelId, provider: 'workers-ai' });
+
+          const generated =
+            studioIntent === 'image'
+              ? await generateCloudImage(d, { prompt: effectiveMessage, conversationId, projectId, signal })
+              : await generateCloudVideo(d, { prompt: effectiveMessage, conversationId, projectId, signal });
+
+          emit({ type: 'text.delta', messageId: assistantMessageId, text: generated.markdown });
+          await d.store.appendMessage({
+            id: assistantMessageId,
+            conversationId,
+            role: 'assistant',
+            content: generated.markdown,
+            status: 'complete',
+            modelId: studioModelId,
+            providerId: 'workers-ai',
+          });
+          emit({ type: 'message.done', messageId: assistantMessageId, tokensIn: 0, tokensOut: 0, finishReason: 'stop' });
+          if (isNew) await maybeTitle(d, conversationId, effectiveMessage, emit);
+          return;
+        }
+
         const history = await d.store.listMessages(conversationId, 40);
         const [memory, project] = await Promise.all([
           projectId ? d.store.listMemory('project', projectId) : Promise.resolve([]),
@@ -100,7 +142,12 @@ export function registerChatRoutes(app: Hono<AppEnv>) {
         ]);
         const globalMemory = await d.store.listMemory('global', null);
 
-        const system = buildChatSystemPrompt({ memory: [...memory, ...globalMemory], project });
+        const system = [
+          buildChatSystemPrompt({ memory: [...memory, ...globalMemory], project, studioMode: studioIntent ?? req.studioMode ?? null }),
+          req.systemPrompt?.trim() ? req.systemPrompt.trim() : '',
+        ]
+          .filter(Boolean)
+          .join('\n\n');
         const messages: ChatTurn[] = [{ role: 'system', content: system }];
         for (const m of history) {
           if (m.id === userMessageId) continue; // appended below with attachments
@@ -108,7 +155,7 @@ export function registerChatRoutes(app: Hono<AppEnv>) {
           if (m.status === 'error' && !m.content) continue;
           messages.push({ role: m.role, content: truncate(m.content, 12_000) });
         }
-        const userTurn: ChatTurn = { role: 'user', content: withAttachments(req.message, req.attachments ?? []) };
+        const userTurn: ChatTurn = { role: 'user', content: withAttachments(effectiveMessage, req.attachments ?? []) };
         messages.push(userTurn);
 
         const imageRefs = (req.attachments ?? []).filter((a) => /^image\/(png|jpe?g|webp|gif)$/i.test(a.mime));
@@ -119,7 +166,7 @@ export function registerChatRoutes(app: Hono<AppEnv>) {
         if (imageRefs.length > 0 && !req.modelId) {
           try {
             resolution = await d.router.resolve({
-              modelId: conversation!.modelId,
+              modelId: undefined,
               modelClass: req.modelClass ?? conversation!.modelClass ?? 'chat',
               requireVision: true,
             });
@@ -132,7 +179,7 @@ export function registerChatRoutes(app: Hono<AppEnv>) {
         } else {
           resolution = await d.router.resolve({
             modelId: req.modelId ?? conversation!.modelId,
-            modelClass: req.modelClass ?? conversation!.modelClass ?? 'chat',
+            modelClass: studioIntent === 'website' ? 'coding' : (req.modelClass ?? conversation!.modelClass ?? 'chat'),
           });
         }
 
@@ -142,7 +189,7 @@ export function registerChatRoutes(app: Hono<AppEnv>) {
             const rec = await d.store.getAttachment(ref.id);
             if (!rec) continue;
             const blob = await d.blob.get(rec.blobKey);
-            if (!blob || blob.size > 6 * 1024 * 1024) continue;
+            if (!blob || blob.size > 10 * 1024 * 1024) continue;
             const b64 = bytesToBase64(blob.data);
             images.push({ mime: rec.mime, dataUrl: `data:${rec.mime};base64,${b64}` });
           }
@@ -166,7 +213,7 @@ export function registerChatRoutes(app: Hono<AppEnv>) {
             messages,
             stream: true,
             temperature: req.temperature,
-            maxTokens: req.maxTokens,
+            maxTokens: req.maxTokens ?? (studioIntent === 'website' ? 4096 : undefined),
             signal,
           },
           {
@@ -234,9 +281,15 @@ async function maybeTitle(
 /** Attachments are inlined as text (that is what actually reaches the model). */
 function withAttachments(message: string, attachments: ChatRequest['attachments']): string {
   const textual = (attachments ?? []).filter((a) => a.text && a.text.trim().length > 0);
-  if (textual.length === 0) return message;
-  const parts = textual.map((a) => `\n\n--- attached file: ${a.name} (${a.mime}, ${a.size} bytes) ---\n${truncate(a.text!, 40_000)}`);
-  return `${message}${parts.join('')}`;
+  const videos = (attachments ?? []).filter((a) => /^video\//i.test(a.mime));
+  const parts: string[] = [];
+  for (const v of videos) {
+    parts.push(`\n\n[Attached video file: "${v.name}" (${v.mime}, ${v.size} bytes) — extracted keyframes from this video are attached as visual images so you can inspect the scenes.]`);
+  }
+  for (const a of textual) {
+    parts.push(`\n\n--- attached file: ${a.name} (${a.mime}, ${a.size} bytes) ---\n${truncate(a.text!, 40_000)}`);
+  }
+  return parts.length > 0 ? `${message}${parts.join('')}` : message;
 }
 
 function bytesToBase64(bytes: Uint8Array): string {

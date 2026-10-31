@@ -543,3 +543,69 @@ describe('local UI provider keys & access token protection', () => {
     expect(allowed.status).toBe(200);
   });
 });
+
+describe('multimedia uploads (video + HTTP Range) & cloud creative studio', () => {
+  it('accepts MP4 video uploads without binary warnings and serves HTTP 206 byte ranges', async () => {
+    const form = new FormData();
+    const fakeMp4 = new Uint8Array(1024);
+    for (let i = 0; i < fakeMp4.length; i++) fakeMp4[i] = i & 0xff;
+    form.append('file', new File([fakeMp4], 'clip.mp4', { type: 'video/mp4' }));
+
+    const res = await app.request(Endpoints.uploads, { method: 'POST', body: form });
+    expect(res.status).toBe(201);
+    const body = (await json(res)) as import('@nova/shared').UploadResponse;
+    expect(body.attachment.mime).toBe('video/mp4');
+    expect(body.warning).toBeUndefined();
+
+    // Seek request from <video controls>
+    const partial = await app.request(`/api/uploads/${body.attachment.id}`, {
+      headers: { Range: 'bytes=100-199' },
+    });
+    expect(partial.status).toBe(206);
+    expect(partial.headers.get('content-range')).toBe('bytes 100-199/1024');
+    const slice = new Uint8Array(await partial.arrayBuffer());
+    expect(slice.byteLength).toBe(100);
+    expect(slice[0]).toBe(100);
+  });
+
+  it('generates free cloud AI images and multi-scene videos via Workers AI Flux binding', async () => {
+    const fakeJpeg = new Uint8Array(600).fill(0xab);
+    const fakeB64 = Buffer.from(fakeJpeg).toString('base64');
+    const mockAi = {
+      models: async () => [{ name: '@cf/black-forest-labs/flux-1-schnell' }],
+      run: async () => ({ image: fakeB64 }),
+    };
+
+    const boot = await bootstrap({
+      env: { NOVA_RUNTIME: 'workers', AI: mockAi } as never,
+      store: new JsonStore(),
+      blob: new MemoryBlobStore(),
+      logLevel: 'error',
+    });
+
+    const imgRes = await boot.app.request(Endpoints.studioImage, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ prompt: 'مدينة مستقبلية فوق السحاب' }),
+    });
+    expect(imgRes.status).toBe(201);
+    const imgBody = (await json(imgRes)) as import('@nova/shared').StudioImageResponse;
+    expect(imgBody.provider).toBe('workers-ai-flux');
+    expect(imgBody.attachment.url).toMatch(/^\/api\/uploads\/att_/);
+    expect(imgBody.markdown).toContain(imgBody.attachment.url);
+
+    const dl = await boot.app.request(imgBody.attachment.url!);
+    expect(dl.status).toBe(200);
+    expect((await dl.arrayBuffer()).byteLength).toBe(600);
+
+    const vidRes = await boot.app.request(Endpoints.studioVideo, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ prompt: 'رحلة في الفضاء', locale: 'ar' }),
+    });
+    expect(vidRes.status).toBe(201);
+    const vidBody = (await json(vidRes)) as import('@nova/shared').StudioVideoResponse;
+    expect(vidBody.scenes).toHaveLength(4);
+    expect(vidBody.markdown).toContain('```nova-video');
+  });
+});

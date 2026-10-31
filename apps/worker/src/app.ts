@@ -10,6 +10,7 @@ import { registerModelRoutes } from './routes/models.js';
 import { registerProjectRoutes } from './routes/projects.js';
 import { registerSandboxRoutes } from './routes/sandbox.js';
 import { registerMiscRoutes } from './routes/misc.js';
+import { registerStudioRoutes } from './routes/studio.js';
 
 /**
  * Build the HTTP app. The same Hono instance is exported by the Workers entry
@@ -37,9 +38,11 @@ export function createApp(deps: AppDeps) {
 
     // Optional zero-cost access token guard for public Cloudflare deployments.
     if (deps.cfg.accessToken && c.req.path.startsWith('/api/') && c.req.path !== '/api/health') {
+      const allowQueryToken = c.req.method === 'GET' && c.req.path.startsWith('/api/uploads/');
       const provided =
         c.req.header('x-nova-token') ??
-        c.req.header('authorization')?.replace(/^Bearer\s+/i, '');
+        c.req.header('authorization')?.replace(/^Bearer\s+/i, '') ??
+        (allowQueryToken ? c.req.query('token') : undefined);
       if (provided !== deps.cfg.accessToken) {
         return c.json(
           {
@@ -72,6 +75,7 @@ export function createApp(deps: AppDeps) {
   registerProjectRoutes(app);
   registerAgentRoutes(app);
   registerSandboxRoutes(app);
+  registerStudioRoutes(app);
   registerMiscRoutes(app);
 
   return app;

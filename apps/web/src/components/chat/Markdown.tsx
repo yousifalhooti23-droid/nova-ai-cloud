@@ -3,28 +3,31 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Check, Copy } from 'lucide-react';
 import { highlight, normalizeLang } from './Highlight';
+import { AiVideoPlayer, GeneratedImageCard, isPreviewableWebsite, WebsitePreviewCard } from './StudioWidgets';
 import { cn } from '@/lib/cn';
 
 interface Props {
   content: string;
   copyLabel: string;
   copiedLabel: string;
+  isStreaming?: boolean;
   className?: string;
 }
 
 /**
  * Markdown renderer for assistant messages.
  * Code fences get a language chip + copy button (a hard requirement of the
- * product), and rendering is memoized because streaming re-renders often.
+ * product), complete HTML websites get an interactive Live Website Preview,
+ * `nova-video` blocks render in the HD AI Video Player, and images render with zoom + download.
  */
-export const Markdown = memo(function Markdown({ content, copyLabel, copiedLabel, className }: Props) {
+export const Markdown = memo(function Markdown({ content, copyLabel, copiedLabel, isStreaming, className }: Props) {
   return (
     <div className={cn('markdown', className)}>
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         components={{
           code({ className: codeClass, children, ...rest }) {
-            const match = /language-(\w+)/.exec(codeClass ?? '');
+            const match = /language-([\w-]+)/.exec(codeClass ?? '');
             const raw = String(children ?? '').replace(/\n$/, '');
             const inline = !match && !raw.includes('\n');
             if (inline) {
@@ -34,10 +37,24 @@ export const Markdown = memo(function Markdown({ content, copyLabel, copiedLabel
                 </code>
               );
             }
+            const lang = match?.[1] ?? normalizeLang(codeClass?.replace('language-', '') ?? '');
+            if (lang === 'nova-video' && !isStreaming) {
+              return <AiVideoPlayer rawJson={raw} />;
+            }
+            if (!isStreaming && isPreviewableWebsite(lang, raw)) {
+              return (
+                <WebsitePreviewCard
+                  code={raw}
+                  renderCodeBlock={() => (
+                    <CodeBlock code={raw} lang={lang} copyLabel={copyLabel} copiedLabel={copiedLabel} />
+                  )}
+                />
+              );
+            }
             return (
               <CodeBlock
                 code={raw}
-                lang={match?.[1] ?? normalizeLang(codeClass?.replace('language-', '') ?? '')}
+                lang={lang}
                 copyLabel={copyLabel}
                 copiedLabel={copiedLabel}
               />
@@ -46,6 +63,9 @@ export const Markdown = memo(function Markdown({ content, copyLabel, copiedLabel
           pre({ children }) {
             // `code` above already renders the full block; drop the wrapper.
             return <>{children}</>;
+          },
+          img({ src, alt }) {
+            return <GeneratedImageCard src={src} alt={alt} />;
           },
           a({ href, children }) {
             return (

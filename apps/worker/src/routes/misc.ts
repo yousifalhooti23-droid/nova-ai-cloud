@@ -98,21 +98,23 @@ export function registerMiscRoutes(app: Hono<AppEnv>) {
     const id = newId('att');
     const key = `uploads/${id}/${file.name.replace(/[^\w.\-]+/g, '_')}`;
     const bytes = new Uint8Array(await file.arrayBuffer());
-    await d.blob.put(key, bytes, { contentType: file.type || 'application/octet-stream' });
+    const inferredMime = inferMimeType(file.name, file.type);
+    await d.blob.put(key, bytes, { contentType: inferredMime });
 
     // Text extraction is what actually reaches the model — be explicit about limits.
     let excerpt: string | null = null;
     let warning: string | undefined;
-    const looksTextual = TEXTUAL_MIME.test(file.type) || /\.(txt|md|json|csv|log|ya?ml|xml|ts|tsx|js|jsx|py|go|rs|java|c|cpp|h|css|html|sh|sql|toml)$/i.test(file.name);
-    const isImage = /^image\/(png|jpe?g|webp|gif)$/i.test(file.type);
+    const looksTextual = TEXTUAL_MIME.test(inferredMime) || /\.(txt|md|json|csv|log|ya?ml|xml|ts|tsx|js|jsx|py|go|rs|java|c|cpp|h|css|html|sh|sql|toml)$/i.test(file.name);
+    const isImage = /^image\/(png|jpe?g|webp|gif|svg\+xml)$/i.test(inferredMime);
+    const isVideo = /^video\/(mp4|webm|quicktime|x-matroska|ogg)$/i.test(inferredMime);
     if (looksTextual && !isBinaryPath(file.name)) {
       const text = new TextDecoder().decode(bytes);
       excerpt = truncate(text, 120_000);
       if (text.length > 120_000) warning = `Only the first 120,000 characters are sent to the model (file has ${text.length}).`;
-    } else if (isImage) {
-      warning = undefined; // Images are forwarded automatically as multimodal input when using a Vision-capable model.
+    } else if (isImage || isVideo) {
+      warning = undefined; // Images & video keyframes are forwarded as multimodal input to Vision-capable models.
     } else {
-      warning = `Binary or unsupported type ("${file.type || 'unknown'}"): stored in blob storage, not sent to the model as text.`;
+      warning = `Binary or unsupported type ("${inferredMime}"): stored in blob storage, not sent to the model as text.`;
     }
 
     const attachment = await d.store.createAttachment({
@@ -120,7 +122,7 @@ export function registerMiscRoutes(app: Hono<AppEnv>) {
       conversationId,
       projectId,
       name: file.name,
-      mime: file.type || 'application/octet-stream',
+      mime: inferredMime,
       sizeBytes: file.size,
       blobKey: key,
       textExcerpt: excerpt,
@@ -139,11 +141,37 @@ export function registerMiscRoutes(app: Hono<AppEnv>) {
     if (!record) throw notFound('attachment not found');
     const blob = await d.blob.get(record.blobKey);
     if (!blob) throw notFound('attachment bytes are missing from storage');
+
+    const contentType = blob.contentType ?? record.mime;
+    const disposition = `inline; filename="${record.name.replace(/"/g, '')}"`;
+    const rangeHeader = c.req.header('range');
+    if (rangeHeader && /^bytes=\d*-\d*$/i.test(rangeHeader)) {
+      const [rawStart, rawEnd] = rangeHeader.replace(/^bytes=/i, '').split('-');
+      const start = rawStart ? Math.min(Number(rawStart), Math.max(0, blob.size - 1)) : 0;
+      const end = rawEnd ? Math.min(Number(rawEnd), Math.max(0, blob.size - 1)) : Math.max(0, blob.size - 1);
+      if (start <= end && blob.size > 0) {
+        const slice = blob.data.subarray(start, end + 1);
+        return new Response(slice as unknown as BodyInit, {
+          status: 206,
+          headers: {
+            'content-type': contentType,
+            'content-length': String(slice.byteLength),
+            'content-range': `bytes ${start}-${end}/${blob.size}`,
+            'accept-ranges': 'bytes',
+            'content-disposition': disposition,
+            'cache-control': 'public, max-age=86400',
+          },
+        });
+      }
+    }
+
     return new Response(blob.data as unknown as BodyInit, {
       headers: {
-        'content-type': blob.contentType ?? record.mime,
+        'content-type': contentType,
         'content-length': String(blob.size),
-        'content-disposition': `inline; filename="${record.name.replace(/"/g, '')}"`,
+        'accept-ranges': 'bytes',
+        'content-disposition': disposition,
+        'cache-control': 'public, max-age=86400',
       },
     });
   });
@@ -201,7 +229,7 @@ export function registerMiscRoutes(app: Hono<AppEnv>) {
       };
     });
     const body: LocalProviderKeysResponse = {
-      writable: d.cfg.runtime === 'node',
+      writable: d.cfg.runtime === 'node' || Boolean(d.cfg.accessToken),
       persisted: Boolean(d.cfg.envFilePath),
       keys,
     };
@@ -210,15 +238,18 @@ export function registerMiscRoutes(app: Hono<AppEnv>) {
 
   app.post('/api/settings/provider-keys', async (c) => {
     const d = c.get('deps');
-    if (d.cfg.runtime !== 'node') {
+    if (d.cfg.runtime !== 'node' && !d.cfg.accessToken) {
       throw forbidden(
-        'Direct UI key saving is only enabled in Desktop / local Node mode. On Cloudflare Workers, use `wrangler secret put OPENROUTER_API_KEY`.',
+        'On public Cloudflare Workers without NOVA_ACCESS_TOKEN, set secrets via `wrangler secret put OPENROUTER_API_KEY` or enable NOVA_ACCESS_TOKEN.',
         'local_keys_only',
       );
     }
     const origin = c.req.header('origin');
+    const host = c.req.header('host');
+    const sameHost = origin && host ? new URL(origin).host === host : false;
     if (
       origin &&
+      !sameHost &&
       !/^https?:\/\/(127\.0\.0\.1|localhost)(:\d+)?$/i.test(origin) &&
       !/^(tauri:\/\/|https?:\/\/tauri\.localhost)/i.test(origin) &&
       !d.cfg.allowedOrigins.includes(origin)
@@ -359,4 +390,23 @@ async function updateEnvFile(filePath: string, updates: Record<string, string | 
 
 function sanitizeEnvVal(v: string): string {
   return v.replace(/[\r\n]+/g, '').trim();
+}
+
+function inferMimeType(name: string, rawType: string): string {
+  if (rawType && rawType !== 'application/octet-stream') return rawType;
+  const ext = name.split('.').pop()?.toLowerCase() ?? '';
+  const map: Record<string, string> = {
+    png: 'image/png',
+    jpg: 'image/jpeg',
+    jpeg: 'image/jpeg',
+    webp: 'image/webp',
+    gif: 'image/gif',
+    svg: 'image/svg+xml',
+    mp4: 'video/mp4',
+    webm: 'video/webm',
+    mov: 'video/quicktime',
+    mkv: 'video/x-matroska',
+    ogv: 'video/ogg',
+  };
+  return map[ext] ?? (rawType || 'application/octet-stream');
 }
