@@ -107,10 +107,15 @@ const pkgDynamicImportFix = {
   setup(b) {
     b.onLoad({ filter: /\.ts$/ }, async (a) => {
       const src = readFileSync(a.path, 'utf8');
-      const out = src.replace(
-        /await\s+import\(\s*(['"])node:(fs|path|fs\/promises|os|child_process|vm)\1\s*\)/g,
-        (_m, q, mod) => `require(${q}node:${mod}${q})`,
-      );
+      const out = src
+        .replace(
+          /await\s+import\(\s*(['"])node:(fs|path|fs\/promises|os|child_process|vm|tls)\1\s*\)/g,
+          (_m, q, mod) => `require(${q}node:${mod}${q})`,
+        )
+        .replace(
+          /await\s+import\(\s*(['"])cloudflare:sockets\1\s*\)/g,
+          'Promise.reject(new Error("cloudflare:sockets unavailable under Node"))',
+        );
       return out === src ? null : { contents: out, loader: 'ts' };
     });
   },

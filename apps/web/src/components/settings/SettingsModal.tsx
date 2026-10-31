@@ -1,7 +1,10 @@
 import { useEffect, useState } from 'react';
-import type { AdminUserSummary, LocalProviderKeysResponse, ModelClass, ModelInfo, ProviderId } from '@nova/shared';
+import type {
+  AdminPendingOtpSummary, AdminSecurityConfigResponse, AdminUserSummary,
+  LocalProviderKeysResponse, ModelClass, ModelInfo, ProviderId,
+} from '@nova/shared';
 import {
-  Activity, Bot, Check, Cpu, Crown, Database, ExternalLink, Globe, Info, KeyRound, Lock, LogOut, RefreshCw, ShieldCheck, TerminalSquare, Trash2, Users,
+  Activity, Bot, Check, Cpu, Crown, Database, ExternalLink, Globe, Info, KeyRound, Lock, LogOut, Mail, RefreshCw, Send, ShieldCheck, TerminalSquare, Trash2, Users,
 } from 'lucide-react';
 import { LOCALES, useI18n, type Locale } from '@/i18n';
 import { cn } from '@/lib/cn';
@@ -714,14 +717,38 @@ function AccountSecurityTab() {
   const [savingPw, setSavingPw] = useState(false);
 
   const [users, setUsers] = useState<AdminUserSummary[]>([]);
+  const [pendingOtps, setPendingOtps] = useState<AdminPendingOtpSummary[]>([]);
   const [loadingUsers, setLoadingUsers] = useState(false);
 
-  const loadAdminUsers = async () => {
+  const [secCfg, setSecCfg] = useState<AdminSecurityConfigResponse | null>(null);
+  const [mailerProvider, setMailerProvider] = useState<'none' | 'gmail' | 'brevo' | 'resend'>('gmail');
+  const [senderEmail, setSenderEmail] = useState('');
+  const [mailerSecret, setMailerSecret] = useState('');
+  const [googleClientId, setGoogleClientId] = useState('');
+  const [otpRequired, setOtpRequired] = useState(true);
+  const [strictTrustedOnly, setStrictTrustedOnly] = useState(false);
+  const [savingSec, setSavingSec] = useState(false);
+  const [testingOtp, setTestingOtp] = useState(false);
+
+  const loadAdminData = async () => {
     if (authUser?.role !== 'owner') return;
     setLoadingUsers(true);
     try {
-      const res = await api.adminUsers();
-      setUsers(res.users);
+      const [usersRes, secRes, pendingRes] = await Promise.all([
+        api.adminUsers(),
+        api.adminGetSecurityConfig().catch(() => null),
+        api.adminPendingOtps().catch(() => ({ pending: [] as AdminPendingOtpSummary[] })),
+      ]);
+      setUsers(usersRes.users);
+      setPendingOtps(pendingRes.pending);
+      if (secRes) {
+        setSecCfg(secRes);
+        setOtpRequired(secRes.otpRequired);
+        setStrictTrustedOnly(secRes.strictTrustedDomainsOnly);
+        setMailerProvider(secRes.mailerProvider === 'none' ? 'gmail' : secRes.mailerProvider);
+        setSenderEmail(secRes.senderEmail || authUser.email);
+        setGoogleClientId(secRes.googleClientId || '');
+      }
     } catch {
       /* ignore */
     } finally {
@@ -730,7 +757,7 @@ function AccountSecurityTab() {
   };
 
   useEffect(() => {
-    void loadAdminUsers();
+    void loadAdminData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authUser?.role]);
 
@@ -751,6 +778,64 @@ function AccountSecurityTab() {
       toast({ kind: 'error', message: describeApiError(err).message });
     } finally {
       setSavingPw(false);
+    }
+  };
+
+  const handleSaveSecurity = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSavingSec(true);
+    try {
+      const saved = await api.adminSaveSecurityConfig({
+        otpRequired,
+        strictTrustedDomainsOnly: strictTrustedOnly,
+        mailerProvider,
+        senderEmail: senderEmail.trim(),
+        secret: mailerSecret.trim() || undefined,
+        googleClientId: googleClientId.trim(),
+      });
+      setSecCfg(saved);
+      setMailerSecret('');
+      toast({
+        kind: 'success',
+        message: isAr
+          ? 'تم حفظ إعدادات الحماية والتحقق (OTP) بنجاح!'
+          : 'OTP & anti-fake email security settings saved!',
+      });
+    } catch (err) {
+      toast({ kind: 'error', message: describeApiError(err).message });
+    } finally {
+      setSavingSec(false);
+    }
+  };
+
+  const handleTestOtp = async () => {
+    setTestingOtp(true);
+    try {
+      const res = await api.adminTestOtp(authUser.email);
+      toast({
+        kind: 'success',
+        message: isAr
+          ? `تم إرسال رمز OTP تجريبي بنجاح إلى ${res.sentTo}! تفقد صندوق الوارد.`
+          : `Test OTP sent to ${res.sentTo}!`,
+      });
+    } catch (err) {
+      toast({ kind: 'error', message: describeApiError(err).message });
+    } finally {
+      setTestingOtp(false);
+    }
+  };
+
+  const handleApprovePending = async (pendingEmail: string) => {
+    try {
+      const { user } = await api.adminApprovePending(pendingEmail);
+      setPendingOtps((prev) => prev.filter((p) => p.email !== pendingEmail));
+      setUsers((prev) => [user, ...prev]);
+      toast({
+        kind: 'success',
+        message: isAr ? `تم تفعيل حساب ${user.email} بنجاح.` : `Activated ${user.email}.`,
+      });
+    } catch (err) {
+      toast({ kind: 'error', message: describeApiError(err).message });
     }
   };
 
@@ -775,7 +860,7 @@ function AccountSecurityTab() {
   };
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex max-h-[68vh] flex-col gap-4 overflow-y-auto pe-1">
       {/* Profile & Quota Card */}
       <div className="rounded-xl border border-line bg-surface p-3.5">
         <div className="flex flex-wrap items-center justify-between gap-2">
@@ -833,6 +918,190 @@ function AccountSecurityTab() {
         </div>
       </div>
 
+      {/* Owner Anti-Fake Email + OTP Verification Setup */}
+      {authUser.role === 'owner' ? (
+        <form onSubmit={handleSaveSecurity} className="rounded-xl border border-accent/30 bg-surface p-3.5">
+          <div className="mb-2.5 flex flex-wrap items-center justify-between gap-2">
+            <p className="flex items-center gap-1.5 text-[12.5px] font-semibold text-accent">
+              <Mail size={14} />
+              {isAr
+                ? 'حماية التسجيل — رمز التحقق (OTP) ومنع الحسابات الوهمية ($0 مجاناً)'
+                : 'Sign-Up Shield — Real Email OTP & Anti-Fake Protection ($0 Free)'}
+            </p>
+            {secCfg?.hasSecret ? (
+              <Badge tone="success">
+                {isAr ? `مفعّل (${secCfg.maskedSecret ?? 'محفوظ'})` : `Active (${secCfg.maskedSecret ?? 'saved'})`}
+              </Badge>
+            ) : (
+              <Badge tone="warning">
+                {isAr ? 'بانتظار ربط بريد الإرسال المجاني' : 'Needs Free Mailer Key'}
+              </Badge>
+            )}
+          </div>
+
+          <div className="flex flex-col gap-2.5">
+            <Switch
+              checked={otpRequired}
+              onChange={setOtpRequired}
+              label={
+                isAr
+                  ? 'فرض التحقق برمز OTP مكوّن من 6 أرقام لكل مستخدم جديد (منع التسجيل الوهمي نهائياً)'
+                  : 'Require 6-digit email OTP for all new accounts'
+              }
+            />
+            <Switch
+              checked={strictTrustedOnly}
+              onChange={setStrictTrustedOnly}
+              label={
+                isAr
+                  ? 'حصر التسجيل على مزوّدي البريد الرسميين فقط (Gmail / Outlook / Hotmail / iCloud / Yahoo / Proton)'
+                  : 'Allow major trusted email providers only (Gmail, Outlook, iCloud, Yahoo, Proton)'
+              }
+            />
+
+            <div className="grid grid-cols-1 gap-2.5 pt-1 sm:grid-cols-2">
+              <Field label={isAr ? 'مزوّد إرسال رموز OTP المجاني' : 'Free OTP Mailer Provider'}>
+                <Select
+                  value={mailerProvider}
+                  onChange={(e) => setMailerProvider(e.target.value as 'none' | 'gmail' | 'brevo' | 'resend')}
+                >
+                  <option value="gmail">
+                    {isAr ? 'Gmail مجاني ($0) — Google App Password (موصى به)' : 'Gmail Free ($0) — App Password'}
+                  </option>
+                  <option value="brevo">
+                    {isAr ? 'Brevo API مجاني (300 رسالة/يوم)' : 'Brevo Free HTTP API (300/day)'}
+                  </option>
+                  <option value="resend">Resend HTTP API</option>
+                  <option value="none">
+                    {isAr ? 'بدون إرسال تلقائي (اعتماد يدوي من المالك)' : 'Manual Owner Approval Only'}
+                  </option>
+                </Select>
+              </Field>
+
+              <Field label={isAr ? 'بريد المرسل (حسابك)' : 'Sender Email'}>
+                <TextInput
+                  type="email"
+                  dir="ltr"
+                  value={senderEmail}
+                  onChange={(e) => setSenderEmail(e.target.value)}
+                  placeholder="yousifalhooti23@gmail.com"
+                />
+              </Field>
+            </div>
+
+            {mailerProvider !== 'none' ? (
+              <Field
+                label={
+                  mailerProvider === 'gmail'
+                    ? isAr
+                      ? 'كلمة مرور تطبيقات Google (16 حرفاً — بدون بطاقة وبـ 0 ريال)'
+                      : 'Google App Password (16 chars — $0 Free)'
+                    : isAr
+                      ? 'مفتاح API لمزوّد البريد'
+                      : 'Mailer API Key'
+                }
+                hint={
+                  mailerProvider === 'gmail'
+                    ? isAr
+                      ? 'تُنشأ في 20 ثانية من حساب Google لإرسال 500 رمز OTP يومياً مجاناً دون كشف كلمة مرور بريدك الأساسية.'
+                      : 'Generate in 20 seconds from your Google Account to send up to 500 free OTP emails/day.'
+                    : undefined
+                }
+              >
+                <div className="flex flex-col gap-1.5">
+                  <TextInput
+                    type="password"
+                    dir="ltr"
+                    value={mailerSecret}
+                    onChange={(e) => setMailerSecret(e.target.value)}
+                    placeholder={
+                      secCfg?.hasSecret
+                        ? isAr
+                          ? `محفوظ حالياً (${secCfg.maskedSecret}) — اتركه فارغاً للإبقاء عليه`
+                          : `Saved (${secCfg.maskedSecret}) — leave blank to keep`
+                        : mailerProvider === 'gmail'
+                          ? 'xxxx xxxx xxxx xxxx'
+                          : 'xkeysib-... / re_...'
+                    }
+                    className="font-mono"
+                  />
+                  {mailerProvider === 'gmail' ? (
+                    <a
+                      href="https://myaccount.google.com/apppasswords"
+                      target="_blank"
+                      rel="noreferrer noopener"
+                      className="inline-flex w-fit items-center gap-1 text-[11.5px] font-medium text-accent underline"
+                    >
+                      <ExternalLink size={11} />
+                      {isAr
+                        ? 'اضغط هنا لفتح صفحة Google App Passwords وإنشاء كود من 16 حرفاً مجاناً'
+                        : 'Open Google App Passwords to create a free 16-char code'}
+                    </a>
+                  ) : null}
+                </div>
+              </Field>
+            ) : null}
+
+            <Field
+              label={isAr ? 'معرّف Google Client ID (اختياري — لزر الدخول السريع عبر Google)' : 'Google OAuth Client ID (Optional)'}
+            >
+              <TextInput
+                dir="ltr"
+                value={googleClientId}
+                onChange={(e) => setGoogleClientId(e.target.value)}
+                placeholder="1234567890-abcdefg.apps.googleusercontent.com"
+                className="font-mono !text-[11.5px]"
+              />
+            </Field>
+
+            <div className="mt-1 flex flex-wrap items-center justify-end gap-2">
+              {secCfg?.hasSecret ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  icon={<Send size={12} />}
+                  loading={testingOtp}
+                  onClick={() => void handleTestOtp()}
+                >
+                  {isAr ? 'إرسال OTP تجريبي لبريدي' : 'Send Test OTP'}
+                </Button>
+              ) : null}
+              <Button type="submit" size="sm" variant="primary" icon={<Check size={12} />} loading={savingSec}>
+                {isAr ? 'حفظ إعدادات التحقق' : 'Save OTP Settings'}
+              </Button>
+            </div>
+          </div>
+        </form>
+      ) : null}
+
+      {/* Pending OTP Registrations Queue (Owner Manual Approval Fallback) */}
+      {authUser.role === 'owner' && pendingOtps.length > 0 ? (
+        <div className="rounded-xl border border-amber-400/30 bg-amber-500/5 p-3.5">
+          <p className="mb-2 text-[12px] font-semibold text-amber-300">
+            {isAr
+              ? `⏳ طلبات تسجيل بانتظار تأكيد OTP (${pendingOtps.length})`
+              : `⏳ Pending OTP Sign-Ups (${pendingOtps.length})`}
+          </p>
+          <div className="space-y-1.5">
+            {pendingOtps.map((p) => (
+              <div
+                key={p.email}
+                className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-line bg-surface px-2.5 py-2 text-[11.5px]"
+              >
+                <div>
+                  <span className="font-medium text-text">{p.displayName}</span>
+                  <span className="ms-2 font-mono text-[11px] text-dim">{p.email}</span>
+                </div>
+                <Button size="sm" variant="outline" onClick={() => void handleApprovePending(p.email)}>
+                  {isAr ? 'تفعيل يدوي' : 'Approve'}
+                </Button>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
       {/* Password Change */}
       <form onSubmit={handlePasswordChange} className="rounded-xl border border-line bg-surface p-3.5">
         <p className="mb-2.5 flex items-center gap-1.5 text-[12.5px] font-semibold text-text">
@@ -883,7 +1152,7 @@ function AccountSecurityTab() {
               <Users size={14} />
               {isAr ? 'لوحة المالك — المستخدمون المسجّلون والحد اليومي' : 'Owner Panel — Registered Users & Quotas'}
             </p>
-            <Button size="sm" variant="ghost" onClick={() => void loadAdminUsers()} loading={loadingUsers}>
+            <Button size="sm" variant="ghost" onClick={() => void loadAdminData()} loading={loadingUsers}>
               <RefreshCw size={12} />
             </Button>
           </div>

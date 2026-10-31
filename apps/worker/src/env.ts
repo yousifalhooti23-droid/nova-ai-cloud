@@ -49,6 +49,16 @@ export interface NovaConfig {
   ownerDisplayName?: string;
   /** Daily quota limit for regular users (default: 20 units/day; 7-day lockout on exhaustion). */
   userDailyQuotaLimit: number;
+  /** Require 6-digit OTP email verification on new public registrations (default: true). */
+  otpRequiredByDefault: boolean;
+  /** Skip live DNS MX lookup (only for offline unit tests). */
+  skipDnsMxCheck: boolean;
+  /** Optional env-supplied mailer / Google OAuth config. */
+  smtpUser?: string;
+  smtpAppPassword?: string;
+  brevoApiKey?: string;
+  resendApiKey?: string;
+  googleClientId?: string;
   /** Writable env file path in local/desktop Node mode for UI key persistence. */
   envFilePath?: string;
   sandbox: SandboxConfig;
@@ -160,6 +170,13 @@ export function loadConfig(env: RawEnv): NovaConfig {
     ownerInitialPassword: read(env, 'NOVA_OWNER_INITIAL_PASSWORD'),
     ownerDisplayName: read(env, 'NOVA_OWNER_NAME'),
     userDailyQuotaLimit: Math.max(1, Number(read(env, 'NOVA_USER_QUOTA_LIMIT') ?? 20)),
+    otpRequiredByDefault: bool(read(env, 'NOVA_REQUIRE_OTP'), true),
+    skipDnsMxCheck: bool(read(env, 'NOVA_SKIP_MX_CHECK'), false),
+    smtpUser: read(env, 'NOVA_SMTP_USER'),
+    smtpAppPassword: read(env, 'NOVA_SMTP_APP_PASSWORD'),
+    brevoApiKey: read(env, 'NOVA_BREVO_API_KEY'),
+    resendApiKey: read(env, 'NOVA_RESEND_API_KEY'),
+    googleClientId: read(env, 'NOVA_GOOGLE_CLIENT_ID'),
     envFilePath: read(env, 'NOVA_ENV_FILE'),
     sandbox: {
       kind: sandboxKind,

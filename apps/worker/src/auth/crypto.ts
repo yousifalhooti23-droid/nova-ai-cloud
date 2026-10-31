@@ -50,6 +50,33 @@ export function generateSessionToken(): string {
   return `nvs_${randomHex(32)}`;
 }
 
+/**
+ * Generates an unbiased 6-digit numeric OTP (`100000` - `999999`) using CSPRNG rejection sampling.
+ */
+export function generateNumericOtp(): string {
+  const range = 900_000;
+  const maxUnbiased = Math.floor(0x1_0000_0000 / range) * range;
+  const buf = new Uint32Array(1);
+  while (true) {
+    crypto.getRandomValues(buf);
+    if (buf[0] < maxUnbiased) {
+      return String(100_000 + (buf[0] % range));
+    }
+  }
+}
+
+export async function hashOtpCode(code: string, existingSaltHex?: string): Promise<{ hashHex: string; saltHex: string }> {
+  const saltHex = existingSaltHex ?? randomHex(16);
+  const hashHex = await sha256HexToken(`otp:${saltHex}:${code.trim()}`);
+  return { hashHex, saltHex };
+}
+
+export async function verifyOtpCode(code: string, expectedHashHex: string, saltHex: string): Promise<boolean> {
+  if (!expectedHashHex || !saltHex) return false;
+  const { hashHex } = await hashOtpCode(code, saltHex);
+  return constantTimeEqual(hashHex, expectedHashHex);
+}
+
 export async function sha256HexToken(input: string): Promise<string> {
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(input));
   return bytesToHex(new Uint8Array(digest));

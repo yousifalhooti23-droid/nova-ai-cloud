@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { AuthUser, HealthResponse, ModelsResponse, SandboxStatusResponse, SettingsResponse } from '@nova/shared';
+import type { AuthSessionResponse, AuthUser, HealthResponse, ModelsResponse, SandboxStatusResponse, SettingsResponse } from '@nova/shared';
 import { api, describeApiError, setStoredSessionToken, type ProbeResponse } from '@/lib/api';
 import type { Locale } from '@/i18n';
 
@@ -71,7 +71,9 @@ interface AppState extends Prefs {
   refreshHealth: () => Promise<void>;
   refreshAuth: () => Promise<void>;
   login: (email: string, password: string) => Promise<void>;
-  register: (displayName: string, email: string, password: string) => Promise<void>;
+  register: (displayName: string, email: string, password: string) => Promise<AuthSessionResponse>;
+  verifyOtp: (email: string, code: string) => Promise<void>;
+  loginWithGoogle: (credential: string) => Promise<void>;
   logout: () => Promise<void>;
   refreshModels: () => Promise<void>;
   refreshCatalog: () => Promise<void>;
@@ -148,6 +150,38 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   async register(displayName, email, password) {
     const res = await api.authRegister({ displayName, email, password });
+    if (res.otpRequired || !res.authenticated) {
+      return res;
+    }
+    if (res.token) setStoredSessionToken(res.token);
+    set({ authUser: res.user, authChecked: true, lastError: null });
+    await Promise.all([get().refreshModels(), get().loadSandbox(), get().loadSettings()]);
+    const [{ useChatStore }, { useCodeStore }] = await Promise.all([import('./chat'), import('./code')]);
+    useChatStore.getState().reset();
+    useCodeStore.getState().resetSession();
+    await Promise.all([
+      useChatStore.getState().loadConversations(),
+      useCodeStore.getState().loadProjects(),
+    ]);
+    return res;
+  },
+
+  async verifyOtp(email, code) {
+    const res = await api.authVerifyOtp({ email, code });
+    if (res.token) setStoredSessionToken(res.token);
+    set({ authUser: res.user, authChecked: true, lastError: null });
+    await Promise.all([get().refreshModels(), get().loadSandbox(), get().loadSettings()]);
+    const [{ useChatStore }, { useCodeStore }] = await Promise.all([import('./chat'), import('./code')]);
+    useChatStore.getState().reset();
+    useCodeStore.getState().resetSession();
+    await Promise.all([
+      useChatStore.getState().loadConversations(),
+      useCodeStore.getState().loadProjects(),
+    ]);
+  },
+
+  async loginWithGoogle(credential) {
+    const res = await api.authGoogle({ credential });
     if (res.token) setStoredSessionToken(res.token);
     set({ authUser: res.user, authChecked: true, lastError: null });
     await Promise.all([get().refreshModels(), get().loadSandbox(), get().loadSettings()]);

@@ -22,11 +22,13 @@ export interface BootstrapOptions {
   adapters?: import('./ai/types.js').ProviderAdapter[];
   /** Test seam: inject a sandbox adapter (bypasses env-based construction). */
   sandbox?: import('./sandbox/types.js').SandboxAdapter;
+  /** Test seam: capture generated OTP codes in headless unit tests. */
+  onOtpGenerated?: (email: string, code: string) => void;
 }
 
 /**
  * Assemble the dependency graph once.
- * Order matters: config → store → blob → router → sandbox → app.
+ * Order matters: config → store → blob → router → sandbox → auth → app.
  */
 export async function bootstrap(opts: BootstrapOptions): Promise<{ app: ReturnType<typeof createApp>; deps: AppDeps }> {
   const cfg = loadConfig(opts.env);
@@ -49,8 +51,6 @@ export async function bootstrap(opts: BootstrapOptions): Promise<{ app: ReturnTy
     } else if (cfg.runtime === 'node') {
       store = new JsonStore({ persistPath: `${cfg.dataDir}/nova-store.json` });
     } else {
-      // Workers runtime without a D1 binding: fail loudly rather than silently
-      // dropping data into memory that dies with the isolate.
       throw new Error('DB binding is missing. Declare d1_databases in wrangler.jsonc, or run the Node dev runtime (NOVA_RUNTIME=node).');
     }
   }
@@ -73,22 +73,30 @@ export async function bootstrap(opts: BootstrapOptions): Promise<{ app: ReturnTy
     ? new D1AuthRepo(opts.env.DB as never)
     : new JsonAuthRepo(cfg.runtime === 'node' && !opts.store ? `${cfg.dataDir}/nova-auth.json` : undefined);
   await authRepo.init();
+
+  const envMailer =
+    cfg.smtpUser && cfg.smtpAppPassword
+      ? { provider: 'gmail' as const, senderEmail: cfg.smtpUser, senderName: 'NOVA AI Cloud', secret: cfg.smtpAppPassword }
+      : cfg.brevoApiKey && (cfg.smtpUser || cfg.ownerEmail)
+        ? { provider: 'brevo' as const, senderEmail: (cfg.smtpUser || cfg.ownerEmail)!, senderName: 'NOVA AI Cloud', secret: cfg.brevoApiKey }
+        : cfg.resendApiKey && (cfg.smtpUser || cfg.ownerEmail)
+          ? { provider: 'resend' as const, senderEmail: (cfg.smtpUser || cfg.ownerEmail)!, senderName: 'NOVA AI Cloud', secret: cfg.resendApiKey }
+          : undefined;
+
   const auth = new AuthService(authRepo, {
+    runtime: cfg.runtime,
     defaultDailyQuota: cfg.userDailyQuotaLimit,
     ownerEmail: cfg.ownerEmail,
     ownerInitialPassword: cfg.ownerInitialPassword,
     ownerDisplayName: cfg.ownerDisplayName,
+    otpRequiredByDefault: cfg.otpRequiredByDefault,
+    skipDnsMxCheck: cfg.skipDnsMxCheck,
+    envMailer,
+    envGoogleClientId: cfg.googleClientId,
+    onOtpGenerated: opts.onOtpGenerated,
   });
   await auth.bootstrapOwner(store);
 
-  /**
-   * Probe the Workers AI binding once at startup.
-   *
-   * `ai.models()` is a catalog read: it runs no inference and spends no neurons,
-   * but under `wrangler dev --local` it fails immediately. Detecting that here
-   * marks the provider `needs-remote` BEFORE the first user request instead of
-   * burning a request to discover it. Bounded by a timeout so boot never hangs.
-   */
   if (cfg.runtime === 'workers' && opts.env.AI && !opts.adapters) {
     try {
       const probe = await Promise.race([

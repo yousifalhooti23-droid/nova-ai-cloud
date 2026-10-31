@@ -18,9 +18,13 @@ import { ScopedStore } from './storage/scoped-store.js';
 
 const PUBLIC_AUTH_PATHS = new Set([
   '/api/health',
+  '/api/auth/config',
   '/api/auth/me',
   '/api/auth/login',
   '/api/auth/register',
+  '/api/auth/verify-otp',
+  '/api/auth/resend-otp',
+  '/api/auth/google',
   '/api/auth/logout',
 ]);
 

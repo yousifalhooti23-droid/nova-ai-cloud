@@ -6,9 +6,11 @@
  * in browser code and no backend URL is configured client-side.
  */
 import type {
+  AdminPendingOtpSummary, AdminSecurityConfigResponse, AdminSecurityConfigUpdateRequest,
   AdminUsersResponse, AdminUserSummary, AgentRun, AgentRunDetailResponse, AgentRunRequest,
-  ApplyAllResponse, AttachmentRef, AuthChangePasswordRequest, AuthLoginRequest,
-  AuthRegisterRequest, AuthSessionResponse,
+  ApplyAllResponse, AttachmentRef, AuthChangePasswordRequest, AuthGoogleRequest, AuthLoginRequest,
+  AuthPublicConfigResponse, AuthRegisterRequest, AuthResendOtpRequest, AuthSessionResponse,
+  AuthVerifyOtpRequest,
   ChangeActionRequest, ChatRequest, Commit, CommitRequest, Conversation, ConversationCreateRequest,
   ConversationPatchRequest, FileChange, FileResponse, FileWriteRequest, HealthResponse,
   LocalProviderKeysResponse, LocalProviderKeyUpdateRequest,
@@ -167,15 +169,32 @@ export interface ProviderKeysResponse {
 export const api = {
   /* ---- health, auth & models ---- */
   health: () => json<HealthResponse>(Endpoints.health, 'GET'),
+  authConfig: () => json<AuthPublicConfigResponse>(Endpoints.authConfig, 'GET'),
   authMe: () => json<AuthSessionResponse>(Endpoints.authMe, 'GET'),
   authLogin: (body: AuthLoginRequest) => json<AuthSessionResponse>(Endpoints.authLogin, 'POST', body),
   authRegister: (body: AuthRegisterRequest) => json<AuthSessionResponse>(Endpoints.authRegister, 'POST', body),
+  authVerifyOtp: (body: AuthVerifyOtpRequest) => json<AuthSessionResponse>(Endpoints.authVerifyOtp, 'POST', body),
+  authResendOtp: (body: AuthResendOtpRequest) =>
+    json<{ ok: boolean; expiresInSec: number; delivery: 'email' | 'pending_owner'; message: string }>(
+      Endpoints.authResendOtp,
+      'POST',
+      body,
+    ),
+  authGoogle: (body: AuthGoogleRequest) => json<AuthSessionResponse>(Endpoints.authGoogle, 'POST', body),
   authLogout: () => json<{ ok: boolean }>(Endpoints.authLogout, 'POST', {}),
   authChangePassword: (body: AuthChangePasswordRequest) =>
     json<{ ok: boolean }>(Endpoints.authChangePassword, 'POST', body),
   adminUsers: () => json<AdminUsersResponse>(Endpoints.adminUsers, 'GET'),
   adminUserQuota: (id: string, body: { action: 'reset' | 'lock_week' | 'set_limit'; limit?: number }) =>
     json<{ user: AdminUserSummary }>(Endpoints.adminUserQuota(id), 'POST', body),
+  adminGetSecurityConfig: () => json<AdminSecurityConfigResponse>(Endpoints.adminSecurityConfig, 'GET'),
+  adminSaveSecurityConfig: (body: AdminSecurityConfigUpdateRequest) =>
+    json<AdminSecurityConfigResponse>(Endpoints.adminSecurityConfig, 'PUT', body),
+  adminTestOtp: (email?: string) =>
+    json<{ ok: boolean; sentTo: string }>(Endpoints.adminTestOtp, 'POST', email ? { email } : {}),
+  adminPendingOtps: () => json<{ pending: AdminPendingOtpSummary[] }>(Endpoints.adminPendingOtps, 'GET'),
+  adminApprovePending: (email: string) =>
+    json<{ user: AdminUserSummary }>(Endpoints.adminApprovePending, 'POST', { email }),
   models: () => json<ModelsResponse>(Endpoints.models, 'GET'),
   refreshModels: (provider?: ProviderId) =>
     json<ModelsRefreshResponse[]>(Endpoints.modelsRefresh, 'POST', provider ? { provider } : {}),

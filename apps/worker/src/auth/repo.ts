@@ -1,7 +1,8 @@
-import type { UserRole } from '@nova/shared';
+import type { MailerProviderKind, UserRole } from '@nova/shared';
 import { nowIso } from '@nova/shared';
 import type { D1Like } from '../storage/d1-store.js';
 import { DEFAULT_SETTINGS, type AppSettings } from '../storage/types.js';
+import { canonicalizeEmail } from './email-guard.js';
 
 export type OwnedResourceType =
   | 'conversation'
@@ -35,9 +36,44 @@ export interface StoredSession {
   createdAt: string;
 }
 
+export interface StoredPendingRegistration {
+  email: string;
+  canonicalEmail: string;
+  displayName: string;
+  passwordHash: string;
+  passwordSalt: string;
+  otpHash: string;
+  otpSalt: string;
+  attempts: number;
+  expiresAt: string;
+  resendAfter: string;
+  createdAt: string;
+}
+
+export interface StoredSecurityConfig {
+  otpRequired: boolean;
+  strictTrustedDomainsOnly: boolean;
+  mailerProvider: MailerProviderKind;
+  senderEmail: string;
+  senderName: string;
+  mailerSecret: string;
+  googleClientId: string;
+}
+
+export const DEFAULT_SECURITY_CONFIG: StoredSecurityConfig = {
+  otpRequired: true,
+  strictTrustedDomainsOnly: false,
+  mailerProvider: 'none',
+  senderEmail: '',
+  senderName: 'NOVA AI Cloud',
+  mailerSecret: '',
+  googleClientId: '',
+};
+
 export interface AuthRepo {
   init(): Promise<void>;
   getUserByEmail(email: string): Promise<StoredUser | null>;
+  getUserByCanonicalEmail(canonicalEmail: string): Promise<StoredUser | null>;
   getUserById(id: string): Promise<StoredUser | null>;
   listUsers(): Promise<StoredUser[]>;
   countUsers(): Promise<number>;
@@ -48,6 +84,15 @@ export interface AuthRepo {
   getSession(tokenHash: string): Promise<StoredSession | null>;
   deleteSession(tokenHash: string): Promise<void>;
   deleteUserSessions(userId: string, keepTokenHash?: string): Promise<void>;
+
+  upsertPendingRegistration(pending: StoredPendingRegistration): Promise<void>;
+  getPendingRegistration(email: string): Promise<StoredPendingRegistration | null>;
+  incrementPendingAttempts(email: string): Promise<number>;
+  deletePendingRegistration(email: string): Promise<void>;
+  listPendingRegistrations(): Promise<StoredPendingRegistration[]>;
+
+  getSecurityConfig(): Promise<StoredSecurityConfig>;
+  saveSecurityConfig(patch: Partial<StoredSecurityConfig>): Promise<StoredSecurityConfig>;
 
   assignResource(type: OwnedResourceType, resourceId: string, userId: string): Promise<void>;
   ownsResource(type: OwnedResourceType, resourceId: string, userId: string): Promise<boolean>;
@@ -97,6 +142,29 @@ export class D1AuthRepo implements AuthRepo {
       ),
       this.db.prepare('CREATE INDEX IF NOT EXISTS idx_auth_sessions_user ON auth_sessions(user_id)'),
       this.db.prepare(
+        `CREATE TABLE IF NOT EXISTS auth_pending_registrations (
+           email           TEXT PRIMARY KEY,
+           canonical_email TEXT NOT NULL,
+           display_name    TEXT NOT NULL,
+           password_hash   TEXT NOT NULL,
+           password_salt   TEXT NOT NULL,
+           otp_hash        TEXT NOT NULL,
+           otp_salt        TEXT NOT NULL,
+           attempts        INTEGER NOT NULL DEFAULT 0,
+           expires_at      TEXT NOT NULL,
+           resend_after    TEXT NOT NULL,
+           created_at      TEXT NOT NULL
+         )`,
+      ),
+      this.db.prepare('CREATE INDEX IF NOT EXISTS idx_auth_pending_canonical ON auth_pending_registrations(canonical_email)'),
+      this.db.prepare(
+        `CREATE TABLE IF NOT EXISTS auth_system_config (
+           config_key   TEXT PRIMARY KEY,
+           config_json  TEXT NOT NULL,
+           updated_at   TEXT NOT NULL
+         )`,
+      ),
+      this.db.prepare(
         `CREATE TABLE IF NOT EXISTS resource_owners (
            resource_type TEXT NOT NULL,
            resource_id   TEXT NOT NULL,
@@ -140,12 +208,35 @@ export class D1AuthRepo implements AuthRepo {
     };
   }
 
+  private mapPending(r: Record<string, unknown>): StoredPendingRegistration {
+    return {
+      email: String(r.email),
+      canonicalEmail: String(r.canonical_email),
+      displayName: String(r.display_name),
+      passwordHash: String(r.password_hash),
+      passwordSalt: String(r.password_salt),
+      otpHash: String(r.otp_hash),
+      otpSalt: String(r.otp_salt),
+      attempts: Number(r.attempts ?? 0),
+      expiresAt: String(r.expires_at),
+      resendAfter: String(r.resend_after),
+      createdAt: String(r.created_at),
+    };
+  }
+
   async getUserByEmail(email: string): Promise<StoredUser | null> {
     const r = await this.db
       .prepare('SELECT * FROM auth_users WHERE email = ?')
       .bind(email.trim().toLowerCase())
       .first();
     return r ? this.mapUser(r) : null;
+  }
+
+  async getUserByCanonicalEmail(canonicalEmail: string): Promise<StoredUser | null> {
+    const exact = await this.getUserByEmail(canonicalEmail);
+    if (exact) return exact;
+    const all = await this.listUsers();
+    return all.find((u) => canonicalizeEmail(u.email) === canonicalEmail) ?? null;
   }
 
   async getUserById(id: string): Promise<StoredUser | null> {
@@ -155,7 +246,7 @@ export class D1AuthRepo implements AuthRepo {
 
   async listUsers(): Promise<StoredUser[]> {
     const { results } = await this.db
-      .prepare('SELECT * FROM auth_users ORDER BY CASE WHEN role = \'owner\' THEN 0 ELSE 1 END, created_at DESC')
+      .prepare("SELECT * FROM auth_users ORDER BY CASE WHEN role = 'owner' THEN 0 ELSE 1 END, created_at DESC")
       .all();
     return results.map((r) => this.mapUser(r));
   }
@@ -249,6 +340,90 @@ export class D1AuthRepo implements AuthRepo {
     } else {
       await this.db.prepare('DELETE FROM auth_sessions WHERE user_id = ?').bind(userId).run();
     }
+  }
+
+  async upsertPendingRegistration(p: StoredPendingRegistration): Promise<void> {
+    // Also clean any stale pending entry for the same canonical email
+    await this.db.prepare('DELETE FROM auth_pending_registrations WHERE canonical_email = ?').bind(p.canonicalEmail).run();
+    await this.db
+      .prepare(
+        `INSERT OR REPLACE INTO auth_pending_registrations (
+           email, canonical_email, display_name, password_hash, password_salt,
+           otp_hash, otp_salt, attempts, expires_at, resend_after, created_at
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .bind(
+        p.email.trim().toLowerCase(),
+        p.canonicalEmail,
+        p.displayName,
+        p.passwordHash,
+        p.passwordSalt,
+        p.otpHash,
+        p.otpSalt,
+        p.attempts,
+        p.expiresAt,
+        p.resendAfter,
+        p.createdAt,
+      )
+      .run();
+  }
+
+  async getPendingRegistration(email: string): Promise<StoredPendingRegistration | null> {
+    const clean = email.trim().toLowerCase();
+    const r = await this.db.prepare('SELECT * FROM auth_pending_registrations WHERE email = ?').bind(clean).first();
+    if (!r) return null;
+    const mapped = this.mapPending(r);
+    if (Date.parse(mapped.expiresAt) <= Date.now()) {
+      await this.deletePendingRegistration(clean);
+      return null;
+    }
+    return mapped;
+  }
+
+  async incrementPendingAttempts(email: string): Promise<number> {
+    const clean = email.trim().toLowerCase();
+    await this.db
+      .prepare('UPDATE auth_pending_registrations SET attempts = attempts + 1 WHERE email = ?')
+      .bind(clean)
+      .run();
+    const cur = await this.getPendingRegistration(clean);
+    return cur?.attempts ?? 99;
+  }
+
+  async deletePendingRegistration(email: string): Promise<void> {
+    await this.db.prepare('DELETE FROM auth_pending_registrations WHERE email = ?').bind(email.trim().toLowerCase()).run();
+  }
+
+  async listPendingRegistrations(): Promise<StoredPendingRegistration[]> {
+    const now = new Date().toISOString();
+    await this.db.prepare('DELETE FROM auth_pending_registrations WHERE expires_at <= ?').bind(now).run();
+    const { results } = await this.db
+      .prepare('SELECT * FROM auth_pending_registrations ORDER BY created_at DESC LIMIT 50')
+      .all();
+    return results.map((r) => this.mapPending(r));
+  }
+
+  async getSecurityConfig(): Promise<StoredSecurityConfig> {
+    const r = await this.db
+      .prepare("SELECT config_json FROM auth_system_config WHERE config_key = 'security'")
+      .first<{ config_json: string }>();
+    if (!r?.config_json) return { ...DEFAULT_SECURITY_CONFIG };
+    try {
+      const parsed = JSON.parse(r.config_json) as Partial<StoredSecurityConfig>;
+      return { ...DEFAULT_SECURITY_CONFIG, ...parsed };
+    } catch {
+      return { ...DEFAULT_SECURITY_CONFIG };
+    }
+  }
+
+  async saveSecurityConfig(patch: Partial<StoredSecurityConfig>): Promise<StoredSecurityConfig> {
+    const cur = await this.getSecurityConfig();
+    const next: StoredSecurityConfig = { ...cur, ...patch };
+    await this.db
+      .prepare("INSERT OR REPLACE INTO auth_system_config (config_key, config_json, updated_at) VALUES ('security', ?, ?)")
+      .bind(JSON.stringify(next), nowIso())
+      .run();
+    return next;
   }
 
   async assignResource(type: OwnedResourceType, resourceId: string, userId: string): Promise<void> {
@@ -351,6 +526,8 @@ export class D1AuthRepo implements AuthRepo {
 interface PersistedAuthState {
   users: StoredUser[];
   sessions: StoredSession[];
+  pending: StoredPendingRegistration[];
+  securityConfig: StoredSecurityConfig;
   owners: { type: OwnedResourceType; resourceId: string; userId: string }[];
   settings: Record<string, AppSettings>;
   rateLimits: Record<string, { hits: number; windowStart: number }>;
@@ -360,6 +537,8 @@ export class JsonAuthRepo implements AuthRepo {
   private state: PersistedAuthState = {
     users: [],
     sessions: [],
+    pending: [],
+    securityConfig: { ...DEFAULT_SECURITY_CONFIG },
     owners: [],
     settings: {},
     rateLimits: {},
@@ -379,6 +558,8 @@ export class JsonAuthRepo implements AuthRepo {
         this.state = {
           users: Array.isArray(raw.users) ? raw.users : [],
           sessions: Array.isArray(raw.sessions) ? raw.sessions : [],
+          pending: Array.isArray(raw.pending) ? raw.pending : [],
+          securityConfig: { ...DEFAULT_SECURITY_CONFIG, ...(raw.securityConfig ?? {}) },
           owners: Array.isArray(raw.owners) ? raw.owners : [],
           settings: raw.settings ?? {},
           rateLimits: raw.rateLimits ?? {},
@@ -402,6 +583,10 @@ export class JsonAuthRepo implements AuthRepo {
   async getUserByEmail(email: string): Promise<StoredUser | null> {
     const clean = email.trim().toLowerCase();
     return this.state.users.find((u) => u.email === clean) ?? null;
+  }
+
+  async getUserByCanonicalEmail(canonicalEmail: string): Promise<StoredUser | null> {
+    return this.state.users.find((u) => canonicalizeEmail(u.email) === canonicalEmail) ?? null;
   }
 
   async getUserById(id: string): Promise<StoredUser | null> {
@@ -462,6 +647,55 @@ export class JsonAuthRepo implements AuthRepo {
   async deleteUserSessions(userId: string, keepTokenHash?: string): Promise<void> {
     this.state.sessions = this.state.sessions.filter((s) => s.userId !== userId || (keepTokenHash && s.tokenHash === keepTokenHash));
     this.flush();
+  }
+
+  async upsertPendingRegistration(p: StoredPendingRegistration): Promise<void> {
+    const clean = p.email.trim().toLowerCase();
+    this.state.pending = this.state.pending.filter((x) => x.email !== clean && x.canonicalEmail !== p.canonicalEmail);
+    this.state.pending.push({ ...p, email: clean });
+    this.flush();
+  }
+
+  async getPendingRegistration(email: string): Promise<StoredPendingRegistration | null> {
+    const clean = email.trim().toLowerCase();
+    const hit = this.state.pending.find((x) => x.email === clean);
+    if (!hit) return null;
+    if (Date.parse(hit.expiresAt) <= Date.now()) {
+      await this.deletePendingRegistration(clean);
+      return null;
+    }
+    return hit;
+  }
+
+  async incrementPendingAttempts(email: string): Promise<number> {
+    const clean = email.trim().toLowerCase();
+    const hit = this.state.pending.find((x) => x.email === clean);
+    if (!hit) return 99;
+    hit.attempts += 1;
+    this.flush();
+    return hit.attempts;
+  }
+
+  async deletePendingRegistration(email: string): Promise<void> {
+    const clean = email.trim().toLowerCase();
+    this.state.pending = this.state.pending.filter((x) => x.email !== clean);
+    this.flush();
+  }
+
+  async listPendingRegistrations(): Promise<StoredPendingRegistration[]> {
+    const now = Date.now();
+    this.state.pending = this.state.pending.filter((x) => Date.parse(x.expiresAt) > now);
+    return [...this.state.pending].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  }
+
+  async getSecurityConfig(): Promise<StoredSecurityConfig> {
+    return { ...DEFAULT_SECURITY_CONFIG, ...this.state.securityConfig };
+  }
+
+  async saveSecurityConfig(patch: Partial<StoredSecurityConfig>): Promise<StoredSecurityConfig> {
+    this.state.securityConfig = { ...this.state.securityConfig, ...patch };
+    this.flush();
+    return { ...this.state.securityConfig };
   }
 
   async assignResource(type: OwnedResourceType, resourceId: string, userId: string): Promise<void> {

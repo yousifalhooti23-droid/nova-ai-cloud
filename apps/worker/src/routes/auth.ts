@@ -1,9 +1,13 @@
 import type {
+  AdminSecurityConfigUpdateRequest,
   AdminUsersResponse,
   AuthChangePasswordRequest,
+  AuthGoogleRequest,
   AuthLoginRequest,
   AuthRegisterRequest,
+  AuthResendOtpRequest,
   AuthSessionResponse,
+  AuthVerifyOtpRequest,
 } from '@nova/shared';
 import type { Hono } from 'hono';
 import type { AppEnv } from '../context.js';
@@ -47,6 +51,11 @@ export function parseCookieHeader(cookieHeader: string | undefined, name: string
 }
 
 export function registerAuthRoutes(app: Hono<AppEnv>) {
+  app.get('/api/auth/config', async (c) => {
+    const d = c.get('deps');
+    return c.json(await d.auth.getPublicConfig());
+  });
+
   app.get('/api/auth/me', async (c) => {
     const d = c.get('deps');
     const body: AuthSessionResponse = {
@@ -61,10 +70,41 @@ export function registerAuthRoutes(app: Hono<AppEnv>) {
     const req = (await c.req.json().catch(() => null)) as AuthRegisterRequest | null;
     if (!req) throw badRequest('JSON body is required', 'bad_body');
 
-    const { user, token } = await d.auth.register({
+    const res = await d.auth.register({
       email: req.email,
       password: req.password,
       displayName: req.displayName,
+      clientIp: resolveClientIp(c),
+    });
+
+    if (res.otpRequired) {
+      const body: AuthSessionResponse = {
+        authenticated: false,
+        user: null,
+        otpRequired: true,
+        pendingEmail: res.pendingEmail,
+        expiresInSec: res.expiresInSec,
+        delivery: res.delivery,
+        message: res.message,
+      };
+      return c.json(body, 202);
+    }
+
+    const isHttps = c.req.url.startsWith('https://') || c.req.header('x-forwarded-proto') === 'https';
+    c.header('set-cookie', buildMediaCookie(res.token, isHttps));
+
+    const body: AuthSessionResponse = { authenticated: true, user: res.user, token: res.token };
+    return c.json(body, 201);
+  });
+
+  app.post('/api/auth/verify-otp', async (c) => {
+    const d = c.get('deps');
+    const req = (await c.req.json().catch(() => null)) as AuthVerifyOtpRequest | null;
+    if (!req) throw badRequest('JSON body is required', 'bad_body');
+
+    const { user, token } = await d.auth.verifyRegistrationOtp({
+      email: req.email,
+      code: req.code,
       clientIp: resolveClientIp(c),
     });
 
@@ -73,6 +113,35 @@ export function registerAuthRoutes(app: Hono<AppEnv>) {
 
     const body: AuthSessionResponse = { authenticated: true, user, token };
     return c.json(body, 201);
+  });
+
+  app.post('/api/auth/resend-otp', async (c) => {
+    const d = c.get('deps');
+    const req = (await c.req.json().catch(() => null)) as AuthResendOtpRequest | null;
+    if (!req) throw badRequest('JSON body is required', 'bad_body');
+
+    const out = await d.auth.resendRegistrationOtp({
+      email: req.email,
+      clientIp: resolveClientIp(c),
+    });
+    return c.json({ ok: true, ...out });
+  });
+
+  app.post('/api/auth/google', async (c) => {
+    const d = c.get('deps');
+    const req = (await c.req.json().catch(() => null)) as AuthGoogleRequest | null;
+    if (!req) throw badRequest('JSON body is required', 'bad_body');
+
+    const { user, token } = await d.auth.loginWithGoogle({
+      credential: req.credential,
+      clientIp: resolveClientIp(c),
+    });
+
+    const isHttps = c.req.url.startsWith('https://') || c.req.header('x-forwarded-proto') === 'https';
+    c.header('set-cookie', buildMediaCookie(token, isHttps));
+
+    const body: AuthSessionResponse = { authenticated: true, user, token };
+    return c.json(body);
   });
 
   app.post('/api/auth/login', async (c) => {
@@ -143,6 +212,53 @@ export function registerAuthRoutes(app: Hono<AppEnv>) {
       throw badRequest('action must be reset, lock_week, or set_limit', 'bad_action');
     }
     const user = await d.auth.manageUserQuotaAsOwner(c.req.param('id'), req.action, req.limit);
+    return c.json({ user });
+  });
+
+  app.get('/api/admin/security-config', async (c) => {
+    const d = c.get('deps');
+    if (!d.currentUser || d.currentUser.role !== 'owner') {
+      throw forbidden('صلاحية مالك المنصة مطلوبة.', 'owner_only');
+    }
+    return c.json(await d.auth.getSecurityConfigForOwner());
+  });
+
+  app.put('/api/admin/security-config', async (c) => {
+    const d = c.get('deps');
+    if (!d.currentUser || d.currentUser.role !== 'owner') {
+      throw forbidden('صلاحية مالك المنصة مطلوبة.', 'owner_only');
+    }
+    const req = (await c.req.json().catch(() => ({}))) as AdminSecurityConfigUpdateRequest;
+    return c.json(await d.auth.updateSecurityConfigAsOwner(req));
+  });
+
+  app.post('/api/admin/security-config/test-otp', async (c) => {
+    const d = c.get('deps');
+    if (!d.currentUser || d.currentUser.role !== 'owner') {
+      throw forbidden('صلاحية مالك المنصة مطلوبة.', 'owner_only');
+    }
+    const req = (await c.req.json().catch(() => ({}))) as { email?: string };
+    const toEmail = req.email?.trim() || d.currentUser.email;
+    await d.auth.sendTestOtpAsOwner(toEmail);
+    return c.json({ ok: true, sentTo: toEmail });
+  });
+
+  app.get('/api/admin/pending-otps', async (c) => {
+    const d = c.get('deps');
+    if (!d.currentUser || d.currentUser.role !== 'owner') {
+      throw forbidden('صلاحية مالك المنصة مطلوبة.', 'owner_only');
+    }
+    return c.json({ pending: await d.auth.listPendingForOwner() });
+  });
+
+  app.post('/api/admin/pending-otps/approve', async (c) => {
+    const d = c.get('deps');
+    if (!d.currentUser || d.currentUser.role !== 'owner') {
+      throw forbidden('صلاحية مالك المنصة مطلوبة.', 'owner_only');
+    }
+    const req = (await c.req.json().catch(() => ({}))) as { email?: string };
+    if (!req.email) throw badRequest('email is required', 'missing_email');
+    const user = await d.auth.approvePendingAsOwner(req.email);
     return c.json({ user });
   });
 }

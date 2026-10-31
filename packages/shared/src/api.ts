@@ -13,13 +13,21 @@ export const API_PREFIX = '/api';
 
 export const Endpoints = {
   health: `${API_PREFIX}/health`,
+  authConfig: `${API_PREFIX}/auth/config`,
   authMe: `${API_PREFIX}/auth/me`,
   authLogin: `${API_PREFIX}/auth/login`,
   authRegister: `${API_PREFIX}/auth/register`,
+  authVerifyOtp: `${API_PREFIX}/auth/verify-otp`,
+  authResendOtp: `${API_PREFIX}/auth/resend-otp`,
+  authGoogle: `${API_PREFIX}/auth/google`,
   authLogout: `${API_PREFIX}/auth/logout`,
   authChangePassword: `${API_PREFIX}/auth/change-password`,
   adminUsers: `${API_PREFIX}/admin/users`,
   adminUserQuota: (id: string) => `${API_PREFIX}/admin/users/${id}/quota`,
+  adminSecurityConfig: `${API_PREFIX}/admin/security-config`,
+  adminTestOtp: `${API_PREFIX}/admin/security-config/test-otp`,
+  adminPendingOtps: `${API_PREFIX}/admin/pending-otps`,
+  adminApprovePending: `${API_PREFIX}/admin/pending-otps/approve`,
   models: `${API_PREFIX}/models`,
   modelsRefresh: `${API_PREFIX}/models/refresh`,
   chat: `${API_PREFIX}/chat`,
@@ -83,6 +91,26 @@ export interface AuthRegisterRequest {
   displayName: string;
 }
 
+export interface AuthVerifyOtpRequest {
+  email: string;
+  code: string;
+}
+
+export interface AuthResendOtpRequest {
+  email: string;
+}
+
+export interface AuthGoogleRequest {
+  credential: string;
+}
+
+export interface AuthPublicConfigResponse {
+  otpRequired: boolean;
+  mailerConfigured: boolean;
+  strictTrustedDomainsOnly: boolean;
+  googleClientId: string | null;
+}
+
 export interface AuthChangePasswordRequest {
   currentPassword: string;
   newPassword: string;
@@ -92,6 +120,43 @@ export interface AuthSessionResponse {
   authenticated: boolean;
   user: AuthUser | null;
   token?: string;
+  otpRequired?: boolean;
+  pendingEmail?: string;
+  expiresInSec?: number;
+  delivery?: 'email' | 'pending_owner';
+  message?: string;
+}
+
+export type MailerProviderKind = 'none' | 'gmail' | 'brevo' | 'resend';
+
+export interface AdminSecurityConfigResponse {
+  otpRequired: boolean;
+  strictTrustedDomainsOnly: boolean;
+  mailerProvider: MailerProviderKind;
+  senderEmail: string;
+  senderName: string;
+  hasSecret: boolean;
+  maskedSecret?: string;
+  googleClientId: string;
+}
+
+export interface AdminSecurityConfigUpdateRequest {
+  otpRequired?: boolean;
+  strictTrustedDomainsOnly?: boolean;
+  mailerProvider?: MailerProviderKind;
+  senderEmail?: string;
+  senderName?: string;
+  secret?: string;
+  clearSecret?: boolean;
+  googleClientId?: string;
+}
+
+export interface AdminPendingOtpSummary {
+  email: string;
+  displayName: string;
+  createdAt: ISODate;
+  expiresAt: ISODate;
+  attempts: number;
 }
 
 export interface AdminUserSummary {
