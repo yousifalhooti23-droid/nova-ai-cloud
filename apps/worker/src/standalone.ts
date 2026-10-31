@@ -230,7 +230,7 @@ function envFromProcess(): RawEnv {
   const env: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(process.env)) if (v !== undefined) env[k] = v;
   env.NOVA_RUNTIME = 'node';
-  env.NOVA_VERSION ??= '0.4.2';
+  env.NOVA_VERSION ??= '0.4.3';
   if (env.NOVA_SANDBOX === 'worker' && !env.SANDBOX) {
     env.SANDBOX = createLocalVmSandboxBinding();
   }

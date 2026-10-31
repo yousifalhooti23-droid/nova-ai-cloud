@@ -23,7 +23,10 @@ export function sseResponse(
       const emit = (evt: ServerEvent) => send(encodeEvent(evt));
       const ac = new AbortController();
 
-      const heartbeat = setInterval(() => send(': ping\n\n'), init.heartbeatMs ?? 15000);
+      // Flush an immediate comment frame so mobile carrier proxies & Cloudflare
+      // start streaming chunks to the mobile browser immediately without buffering.
+      send(': ping\n\n');
+      const heartbeat = setInterval(() => send(': ping\n\n'), init.heartbeatMs ?? 10000);
       // Heartbeats keep proxies from buffering/closing an idle agent stream.
       (heartbeat as unknown as { unref?: () => void }).unref?.();
 

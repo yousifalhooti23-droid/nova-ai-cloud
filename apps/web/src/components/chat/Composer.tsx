@@ -40,8 +40,15 @@ export function Composer({ projectId, onNeedProject }: { projectId?: string | nu
 
   const submit = () => {
     if (!canSend) return;
-    void send(value.trim(), projectId ?? null);
+    const text = value.trim();
     setValue('');
+    if (taRef.current) {
+      taRef.current.style.height = 'auto';
+      if (typeof window !== 'undefined' && window.innerWidth < 768) {
+        taRef.current.blur();
+      }
+    }
+    void send(text, projectId ?? null);
   };
 
   const onFiles = async (files: FileList | File[] | null) => {
@@ -181,7 +188,7 @@ export function Composer({ projectId, onNeedProject }: { projectId?: string | nu
               }
             }}
             onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+              if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
                 submit();
               }
@@ -230,6 +237,9 @@ export function Composer({ projectId, onNeedProject }: { projectId?: string | nu
               ) : (
                 <button
                   type="button"
+                  onPointerDown={(e) => {
+                    if (canSend) e.preventDefault();
+                  }}
                   onClick={submit}
                   disabled={!canSend}
                   className="btn btn-primary !px-3 !py-1.5 sm:!px-3.5 sm:!py-2 !text-[12.5px] sm:!text-[13px]"

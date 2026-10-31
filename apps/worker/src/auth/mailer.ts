@@ -82,6 +82,19 @@ export async function sendOtpEmail(cfg: MailerConfig, input: SendOtpEmailInput):
     });
     if (!res.ok) {
       const detail = await res.text().catch(() => '');
+      if (res.status === 401 && detail.includes('unrecognised IP')) {
+        throw new Error(
+          'Brevo حظر عنوان الـ IP لحماية الحساب. افتح Brevo > Settings > Security > Authorized IPs واضغط Deactivate blocking أو اضغط على الرابط في الإيميل الوارد.',
+        );
+      }
+      if (res.status === 403 || detail.includes('permission')) {
+        throw new Error(
+          'مفتاح Brevo API لا يملك صلاحية إرسال البريد. اختر Full Access أو فعّل All في Transactional email عند إنشاء المفتاح.',
+        );
+      }
+      if (detail.includes('sender') || detail.includes('unverified')) {
+        throw new Error('البريد المرسل غير موثق في Brevo. يرجى توثيقه من Senders & IPs.');
+      }
       throw new Error(`Brevo API error (${res.status}): ${detail.slice(0, 200)}`);
     }
     return;

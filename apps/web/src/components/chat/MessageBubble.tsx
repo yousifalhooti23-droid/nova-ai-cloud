@@ -74,7 +74,7 @@ export const MessageBubble = memo(function MessageBubble({
           ) : (
             <>
               {reasoningText ? (
-                <details className="mb-2 rounded-lg border border-line bg-surface/70 px-2.5 py-1.5">
+                <details open={isStreaming ? true : undefined} className="mb-2 rounded-lg border border-line bg-surface/70 px-2.5 py-1.5">
                   <summary className="cursor-pointer select-none text-[11px] text-dim">{t('agent.thought')}</summary>
                   <p className="mt-1.5 whitespace-pre-wrap text-[12px] leading-relaxed text-muted">{reasoningText}</p>
                 </details>

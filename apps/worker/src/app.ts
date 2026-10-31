@@ -115,7 +115,13 @@ export function createApp(deps: AppDeps) {
       c.res.headers.set('strict-transport-security', 'max-age=31536000; includeSubDomains');
     }
     if (isApi && !isUploadRead) {
-      c.res.headers.set('cache-control', 'no-store, private');
+      const contentType = c.res.headers.get('content-type') ?? '';
+      if (contentType.includes('text/event-stream')) {
+        c.res.headers.set('cache-control', 'no-cache, no-transform');
+        c.res.headers.set('x-accel-buffering', 'no');
+      } else {
+        c.res.headers.set('cache-control', 'no-store, private');
+      }
     }
   });
 

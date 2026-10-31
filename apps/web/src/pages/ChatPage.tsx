@@ -61,7 +61,11 @@ export function ChatPage() {
   }, [loadProjects, loadConversations]);
 
   const list = messages ?? [];
-  const showStreaming = streaming.active || (streaming.text.length > 0 && streaming.messageId !== null);
+  const showStreaming =
+    streaming.active ||
+    streaming.error !== null ||
+    (streaming.text.length > 0 && streaming.messageId !== null) ||
+    (streaming.reasoning.length > 0 && streaming.messageId !== null);
 
   const { ref, atBottom, onScroll, scrollToBottom } = useStickToBottom<HTMLDivElement>([
     list.length,
@@ -332,6 +336,8 @@ export function ChatPage() {
                   streamingText={streaming.text}
                   reasoningText={streaming.reasoning || undefined}
                   isStreaming={streaming.active}
+                  canRegenerate={Boolean(streaming.error)}
+                  onRegenerate={() => void regenerate(projectId)}
                 />
                 {!streaming.active && streaming.modelId ? (
                   <div className="mt-1 ms-10">
