@@ -79,10 +79,10 @@ export function Composer({ projectId, onNeedProject }: { projectId?: string | nu
   const tokens = estimateTokens(value);
 
   return (
-    <div className="px-2.5 pb-2.5 sm:px-4 sm:pb-4">
+    <div className="pb-safe px-2.5 pt-1 sm:px-4 sm:pb-4">
       <div className="mx-auto w-full max-w-3xl">
         {/* Studio Mode Bar */}
-        <div className="mb-2 flex items-center gap-1.5 overflow-x-auto no-scrollbar -mx-1 px-1 sm:flex-wrap">
+        <div className="mb-1.5 sm:mb-2 flex items-center gap-1.5 overflow-x-auto no-scrollbar -mx-1 px-1 sm:flex-wrap">
           {modes.map((m) => {
             const active = composer.studioMode === m.id;
             return (
@@ -190,7 +190,7 @@ export function Composer({ projectId, onNeedProject }: { projectId?: string | nu
             className="max-h-[200px] w-full resize-none bg-transparent px-3 pt-2.5 sm:px-3.5 sm:pt-3 text-[15px] sm:text-[13.5px] leading-relaxed text-text outline-none placeholder:text-dim disabled:opacity-60"
           />
 
-          <div className="flex flex-wrap items-center gap-2 px-2.5 py-2">
+          <div className="flex items-center gap-1.5 px-2 py-1.5 sm:gap-2 sm:px-2.5 sm:py-2">
             <input
               ref={fileRef}
               type="file"
@@ -201,6 +201,7 @@ export function Composer({ projectId, onNeedProject }: { projectId?: string | nu
             />
             <IconButton
               label={t('chat.attach')}
+              className="shrink-0"
               onClick={() => (projectId ? fileRef.current?.click() : (onNeedProject?.(), fileRef.current?.click()))}
               disabled={composer.uploading}
             >
@@ -212,35 +213,37 @@ export function Composer({ projectId, onNeedProject }: { projectId?: string | nu
               onChange={(modelId) => setComposer({ modelId })}
               modelClass={composer.modelClass}
               onClassChange={(c: ModelClass) => setComposer({ modelClass: c })}
+              placement="top"
+              className="min-w-0 shrink"
               compact
             />
 
-            <div className="ms-auto flex items-center gap-2">
+            <div className="ms-auto flex shrink-0 items-center gap-1.5 sm:gap-2">
               {tokens > 0 ? (
                 <span className="hidden font-mono text-[10.5px] text-dim sm:inline">~{formatNumber(tokens)} tok</span>
               ) : null}
               {streaming ? (
-                <button type="button" onClick={stop} className="btn btn-outline !border-danger/40 !text-danger">
+                <button type="button" onClick={stop} className="btn btn-outline !px-2.5 !py-1.5 sm:!px-3 sm:!py-2 !border-danger/40 !text-danger">
                   <Square size={12} />
-                  {t('chat.stop')}
+                  <span>{t('chat.stop')}</span>
                 </button>
               ) : (
                 <button
                   type="button"
                   onClick={submit}
                   disabled={!canSend}
-                  className="btn btn-primary"
+                  className="btn btn-primary !px-3 !py-1.5 sm:!px-3.5 sm:!py-2 !text-[12.5px] sm:!text-[13px]"
                   title="Enter"
                 >
                   <Send size={13} />
-                  {t('chat.send')}
+                  <span>{t('chat.send')}</span>
                 </button>
               )}
             </div>
           </div>
         </div>
 
-        <p className="mt-1.5 px-1 text-[10.5px] leading-relaxed text-dim">
+        <p className="mt-1.5 hidden px-1 text-[10.5px] leading-relaxed text-dim sm:block">
           {t('chat.keys')}
           {!projectId ? ` · ${t('chat.noProject')}` : ''}
         </p>

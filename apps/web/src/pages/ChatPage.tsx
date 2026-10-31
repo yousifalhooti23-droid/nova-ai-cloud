@@ -11,6 +11,7 @@ import { api, describeApiError } from '@/lib/api';
 import { useAppStore } from '@/store/app';
 import { useChatStore } from '@/store/chat';
 import { useCodeStore } from '@/store/code';
+import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { useStickToBottom } from '@/hooks/useStickToBottom';
 import { Composer } from '@/components/chat/Composer';
 import { AnswerMeta, MessageBubble } from '@/components/chat/MessageBubble';
@@ -41,6 +42,7 @@ export function ChatPage() {
   const health = useAppStore((s) => s.health);
   const openSettings = useAppStore((s) => s.openSettings);
   const setMobileSidebarOpen = useAppStore((s) => s.setMobileSidebarOpen);
+  const isMobile = useMediaQuery('(max-width: 859px)');
 
   const [memoryOpen, setMemoryOpen] = useState(false);
   const [renaming, setRenaming] = useState(false);
@@ -80,18 +82,21 @@ export function ChatPage() {
   return (
     <div className="flex h-full min-h-0 flex-col">
       {/* ---------------------------------------------------------- header */}
-      <header className="flex h-[52px] shrink-0 items-center gap-2 border-b border-line bg-surface/70 px-3 sm:px-4 backdrop-blur">
+      <header className="flex h-[52px] shrink-0 items-center gap-1.5 sm:gap-2 border-b border-line bg-surface/80 px-2.5 sm:px-4 backdrop-blur">
         {/* Mobile menu toggle */}
-        <button
-          type="button"
-          onClick={() => setMobileSidebarOpen(true)}
-          className="inline-flex items-center justify-center rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-text md:hidden"
-          title={t('nav.conversations')}
-        >
-          <Menu size={18} />
-        </button>
+        {isMobile ? (
+          <button
+            type="button"
+            onClick={() => setMobileSidebarOpen(true)}
+            className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-muted transition-colors hover:bg-elevated hover:text-text"
+            title={t('nav.conversations')}
+            aria-label={t('nav.conversations')}
+          >
+            <Menu size={19} />
+          </button>
+        ) : null}
 
-        <div className="flex min-w-0 flex-1 items-center gap-2">
+        <div className="flex min-w-0 flex-1 items-center gap-1.5 sm:gap-2">
           {renaming ? (
             <TextInput
               autoFocus
@@ -109,13 +114,13 @@ export function ChatPage() {
             />
           ) : (
             <>
-              <h1 className="max-w-[18ch] sm:max-w-[46ch] truncate text-[13px] sm:text-[13.5px] font-medium">
+              <h1 className="min-w-0 truncate text-[13px] sm:text-[13.5px] font-medium">
                 {conversation?.title || t('nav.newChat')}
               </h1>
               {activeId && !activeId.startsWith('conv_local') ? (
                 <IconButton
                   label={t('common.rename')}
-                  className="!px-1.5 !py-1.5"
+                  className="shrink-0 !px-1.5 !py-1.5"
                   onClick={() => {
                     setRenameValue(conversation?.title ?? '');
                     setRenaming(true);
@@ -132,13 +137,15 @@ export function ChatPage() {
         </div>
 
         {/* Mobile New Chat Button */}
-        <IconButton
-          label={t('nav.newChat')}
-          onClick={() => void newConversation()}
-          className="md:hidden"
-        >
-          <Plus size={16} />
-        </IconButton>
+        {isMobile ? (
+          <IconButton
+            label={t('nav.newChat')}
+            onClick={() => void newConversation()}
+            className="shrink-0"
+          >
+            <Plus size={17} />
+          </IconButton>
+        ) : null}
 
         {/* project link */}
         <Dropdown
@@ -149,14 +156,16 @@ export function ChatPage() {
               type="button"
               onClick={toggle}
               className={cn(
-                'flex items-center gap-1.5 rounded-lg border px-2 py-1.5 text-[11.5px] transition-colors',
+                'flex shrink-0 items-center gap-1.5 rounded-lg border px-2 py-1.5 text-[11.5px] transition-colors',
                 project ? 'border-accent/40 bg-accent/10 text-accent' : 'border-line-strong bg-elevated text-muted hover:text-text',
                 open && 'border-accent/50',
               )}
               title={t('chat.linkProject')}
             >
-              {project ? <FolderKanban size={12} /> : <Link2 size={12} />}
-              <span className="max-w-[130px] truncate">{project ? project.name : t('chat.linkProject')}</span>
+              {project ? <FolderKanban size={13} /> : <Link2 size={13} />}
+              <span className={cn('max-w-[90px] sm:max-w-[130px] truncate', !project && 'hidden sm:inline')}>
+                {project ? project.name : t('chat.linkProject')}
+              </span>
             </button>
           )}
         >
@@ -235,57 +244,57 @@ export function ChatPage() {
       {/* -------------------------------------------------------- messages */}
       <div ref={ref} onScroll={onScroll} className="scroll-thin relative min-h-0 flex-1">
         {list.length === 0 && !showStreaming ? (
-          <div className="mx-auto flex h-full max-w-3xl flex-col items-center justify-center px-6 py-10">
-            <div className="mb-4 grid h-12 w-12 place-items-center rounded-2xl border border-accent/25 bg-accent/10 text-accent">
-              <Sparkles size={22} />
+          <div className="mx-auto flex min-h-full max-w-3xl flex-col items-center justify-center px-3.5 py-5 sm:px-6 sm:py-10">
+            <div className="mb-3 sm:mb-4 grid h-10 w-10 sm:h-12 sm:w-12 place-items-center rounded-2xl border border-accent/25 bg-accent/10 text-accent">
+              <Sparkles size={20} />
             </div>
-            <h2 className="text-center text-[19px] font-semibold tracking-tight">{t('chat.emptyTitle')}</h2>
-            <p className="mt-1.5 max-w-md text-center text-[12.5px] leading-relaxed text-dim">{t('chat.emptyHint')}</p>
+            <h2 className="text-center text-[17px] sm:text-[19px] font-semibold tracking-tight">{t('chat.emptyTitle')}</h2>
+            <p className="mt-1 sm:mt-1.5 max-w-md text-center text-[12px] sm:text-[12.5px] leading-relaxed text-dim">{t('chat.emptyHint')}</p>
 
             {/* Quick Creative Studio Launchers */}
-            <div className="mt-5 grid w-full max-w-xl grid-cols-1 gap-2 sm:grid-cols-3">
+            <div className="mt-4 sm:mt-5 grid w-full max-w-xl grid-cols-3 gap-1.5 sm:gap-2">
               <button
                 type="button"
                 onClick={() => setComposer({ studioMode: 'image' })}
-                className="card-hover flex items-center gap-2 rounded-xl border border-accent/25 bg-accent/5 px-3 py-2.5 text-start text-[12.5px] font-medium text-text"
+                className="card-hover flex flex-col sm:flex-row items-center justify-center sm:justify-start gap-1.5 sm:gap-2 rounded-xl border border-accent/25 bg-accent/5 px-2 py-2.5 sm:px-3 text-center sm:text-start text-[11.5px] sm:text-[12.5px] font-medium text-text"
               >
                 <ImageIcon size={15} className="shrink-0 text-accent" />
-                <span>{t('studio.mode.image')}</span>
+                <span className="truncate">{t('studio.mode.image')}</span>
               </button>
               <button
                 type="button"
                 onClick={() => setComposer({ studioMode: 'video' })}
-                className="card-hover flex items-center gap-2 rounded-xl border border-accent/25 bg-accent/5 px-3 py-2.5 text-start text-[12.5px] font-medium text-text"
+                className="card-hover flex flex-col sm:flex-row items-center justify-center sm:justify-start gap-1.5 sm:gap-2 rounded-xl border border-accent/25 bg-accent/5 px-2 py-2.5 sm:px-3 text-center sm:text-start text-[11.5px] sm:text-[12.5px] font-medium text-text"
               >
                 <Film size={15} className="shrink-0 text-accent" />
-                <span>{t('studio.mode.video')}</span>
+                <span className="truncate">{t('studio.mode.video')}</span>
               </button>
               <button
                 type="button"
                 onClick={() => setComposer({ studioMode: 'website' })}
-                className="card-hover flex items-center gap-2 rounded-xl border border-accent/25 bg-accent/5 px-3 py-2.5 text-start text-[12.5px] font-medium text-text"
+                className="card-hover flex flex-col sm:flex-row items-center justify-center sm:justify-start gap-1.5 sm:gap-2 rounded-xl border border-accent/25 bg-accent/5 px-2 py-2.5 sm:px-3 text-center sm:text-start text-[11.5px] sm:text-[12.5px] font-medium text-text"
               >
                 <Globe size={15} className="shrink-0 text-accent" />
-                <span>{t('studio.mode.website')}</span>
+                <span className="truncate">{t('studio.mode.website')}</span>
               </button>
             </div>
 
-            <div className="mt-3 grid w-full max-w-xl grid-cols-1 gap-2 sm:grid-cols-2">
+            <div className="mt-2.5 sm:mt-3 grid w-full max-w-xl grid-cols-2 gap-1.5 sm:gap-2">
               {suggestions.map((s) => (
                 <button
                   key={s}
                   type="button"
                   onClick={() => void send(s, projectId)}
-                  className="card-hover flex items-center gap-2 rounded-lg border border-line bg-panel px-3 py-2.5 text-start text-[12.5px] text-muted"
+                  className="card-hover flex items-start sm:items-center gap-1.5 sm:gap-2 rounded-xl sm:rounded-lg border border-line bg-panel px-2.5 py-2 sm:px-3 sm:py-2.5 text-start text-[11.5px] sm:text-[12.5px] leading-snug text-muted"
                 >
-                  <Lightbulb size={13} className="shrink-0 text-accent" />
-                  <span className="min-w-0">{s}</span>
+                  <Lightbulb size={13} className="mt-0.5 sm:mt-0 shrink-0 text-accent" />
+                  <span className="min-w-0 line-clamp-2">{s}</span>
                 </button>
               ))}
             </div>
           </div>
         ) : (
-          <div className="mx-auto flex w-full max-w-3xl flex-col gap-5 px-4 py-6">
+          <div className="mx-auto flex w-full max-w-3xl flex-col gap-4 sm:gap-5 px-3 py-4 sm:px-4 sm:py-6">
             {loadingMessages && list.length === 0 ? (
               <div className="flex items-center justify-center gap-2 py-10 text-dim">
                 <Spinner /> <span className="text-[12px]">{t('common.loading')}</span>

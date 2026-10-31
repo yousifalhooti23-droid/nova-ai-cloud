@@ -3,6 +3,8 @@ import type { AuthSessionResponse, AuthUser, HealthResponse, ModelsResponse, San
 import { api, describeApiError, setStoredSessionToken, type ProbeResponse } from '@/lib/api';
 import type { Locale } from '@/i18n';
 
+declare const __NOVA_BUILD_VERSION__: string | undefined;
+
 export type View = 'chat' | 'code';
 export type SettingsTabId = 'general' | 'account' | 'providers' | 'agent' | 'storage';
 
@@ -121,6 +123,35 @@ export const useAppStore = create<AppState>((set, get) => ({
   async refreshHealth() {
     try {
       const health = await api.health();
+      // Auto-upgrade any stale open mobile/desktop browser tab once when a newer Worker is deployed.
+      if (
+        typeof window !== 'undefined' &&
+        health.runtime === 'workers' &&
+        health.version &&
+        typeof __NOVA_BUILD_VERSION__ !== 'undefined' &&
+        health.version !== __NOVA_BUILD_VERSION__
+      ) {
+        try {
+          const reloadKey = 'nova.reloaded_version';
+          if (sessionStorage.getItem(reloadKey) !== health.version) {
+            sessionStorage.setItem(reloadKey, health.version);
+            const u = new URL(window.location.href);
+            u.searchParams.set('_v', health.version);
+            window.location.replace(u.toString());
+            return;
+          }
+        } catch {
+          /* ignore storage restrictions */
+        }
+      } else if (typeof window !== 'undefined' && window.location.search.includes('_v=')) {
+        try {
+          const u = new URL(window.location.href);
+          u.searchParams.delete('_v');
+          window.history.replaceState({}, '', u.pathname + u.search + u.hash);
+        } catch {
+          /* ignore */
+        }
+      }
       set({ health, offline: false, lastError: null });
     } catch (err) {
       const { message } = describeApiError(err);
@@ -276,7 +307,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   toggleSidebar() {
-    if (typeof window !== 'undefined' && window.innerWidth < 768) {
+    if (typeof window !== 'undefined' && window.innerWidth < 860) {
       set((s) => ({ mobileSidebarOpen: !s.mobileSidebarOpen }));
     } else {
       get().patchPrefs({ sidebarCollapsed: !get().sidebarCollapsed });

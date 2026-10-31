@@ -281,20 +281,36 @@ export function useDropdown() {
   return useContext(DropdownCtx);
 }
 
-export function Dropdown({ trigger, children, align = 'start', width = 260, className }: { trigger: (props: { open: boolean; toggle: () => void }) => ReactNode; children: ReactNode; align?: 'start' | 'end'; width?: number; className?: string }) {
+export function Dropdown({
+  trigger,
+  children,
+  align = 'start',
+  placement = 'bottom',
+  width = 260,
+  className,
+}: {
+  trigger: (props: { open: boolean; toggle: () => void }) => ReactNode;
+  children: ReactNode;
+  align?: 'start' | 'end';
+  placement?: 'bottom' | 'top';
+  width?: number;
+  className?: string;
+}) {
   const [open, setOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!open) return;
-    const onDown = (e: MouseEvent) => {
+    const onDown = (e: MouseEvent | TouchEvent) => {
       if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) setOpen(false);
     };
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setOpen(false);
     document.addEventListener('mousedown', onDown);
+    document.addEventListener('touchstart', onDown, { passive: true });
     document.addEventListener('keydown', onKey);
     return () => {
       document.removeEventListener('mousedown', onDown);
+      document.removeEventListener('touchstart', onDown);
       document.removeEventListener('keydown', onKey);
     };
   }, [open]);
@@ -307,11 +323,22 @@ export function Dropdown({ trigger, children, align = 'start', width = 260, clas
       {open ? (
         <DropdownCtx.Provider value={ctx}>
           <div
+            className="fixed inset-0 z-40 bg-black/40 sm:hidden"
+            onClick={() => setOpen(false)}
+            aria-hidden
+          />
+          <div
             className={cn(
-              'animate-in absolute z-40 mt-1.5 overflow-hidden rounded-lg border border-line-strong bg-elevated p-1 shadow-xl',
-              align === 'end' ? 'end-0' : 'start-0',
+              'animate-in z-50 overflow-hidden rounded-xl sm:rounded-lg border border-line-strong bg-elevated p-1.5 sm:p-1 shadow-2xl sm:shadow-xl',
+              // Mobile (< 640px): clean full-width floating sheet anchored safely inside viewport
+              'max-sm:fixed max-sm:inset-x-3 max-sm:w-auto max-sm:max-h-[72dvh] max-sm:overflow-y-auto',
+              placement === 'top' ? 'max-sm:bottom-[104px]' : 'max-sm:top-[58px]',
+              // Desktop / tablet (>= 640px): popover anchored to trigger
+              'sm:absolute',
+              placement === 'top' ? 'sm:bottom-full sm:mb-1.5' : 'sm:top-full sm:mt-1.5',
+              align === 'end' ? 'sm:end-0' : 'sm:start-0',
             )}
-            style={{ width, maxWidth: 'calc(100vw - 1.5rem)' }}
+            style={{ width: typeof window !== 'undefined' && window.innerWidth < 640 ? undefined : width, maxWidth: 'calc(100vw - 1.5rem)' }}
           >
             {children}
           </div>

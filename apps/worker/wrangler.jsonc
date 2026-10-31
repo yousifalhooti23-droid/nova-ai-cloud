@@ -7,11 +7,13 @@
   "observability": { "enabled": true },
 
   // Serve the built web app from the same Worker (single origin => no CORS pain).
+  // Route `/`, `/index.html`, and `/api/*` through the Worker first so HTML is
+  // always served with `Cache-Control: no-store` (preventing stale mobile tabs).
   "assets": {
     "directory": "../web/dist",
     "binding": "ASSETS",
     "not_found_handling": "single-page-application",
-    "run_worker_first": ["/api/*"]
+    "run_worker_first": ["/api/*", "/", "/index.html"]
   },
 
   "d1_databases": [
@@ -43,6 +45,6 @@
     "NOVA_OWNER_EMAIL": "yousifalhooti23@gmail.com",
     "NOVA_OWNER_NAME": "Yousif",
     "NOVA_USER_QUOTA_LIMIT": "20",
-    "NOVA_VERSION": "0.4.1"
+    "NOVA_VERSION": "0.4.2"
   }
 }

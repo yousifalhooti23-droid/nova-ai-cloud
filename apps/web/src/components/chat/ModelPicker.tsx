@@ -25,6 +25,7 @@ export function ModelPicker({
   className,
   showClass = true,
   compact = false,
+  placement = 'bottom',
 }: {
   value: string | null;
   onChange: (modelId: string | null) => void;
@@ -33,6 +34,7 @@ export function ModelPicker({
   className?: string;
   showClass?: boolean;
   compact?: boolean;
+  placement?: 'bottom' | 'top';
 }) {
   const { t } = useI18n();
   const models = useAppStore((s) => s.models?.models ?? NO_MODELS);
@@ -79,21 +81,22 @@ export function ModelPicker({
     <Dropdown
       width={380}
       align="start"
+      placement={placement}
       className={className}
       trigger={({ toggle, open }) => (
         <button
           type="button"
           onClick={toggle}
           className={cn(
-            'flex items-center gap-1.5 rounded-lg border border-line-strong bg-elevated px-2.5 py-1.5 text-[12px] text-muted transition-colors hover:border-[#46505e] hover:text-text',
+            'flex max-w-full min-w-0 items-center gap-1.5 rounded-lg border border-line-strong bg-elevated px-2.5 py-1.5 text-[12px] text-muted transition-colors hover:border-[#46505e] hover:text-text',
             open && 'border-accent/50 text-text',
-            compact && 'px-2 py-1 text-[11.5px]',
+            compact && 'px-2 py-1.5 sm:py-1 text-[11.5px]',
           )}
           title={t('model.title')}
         >
-          <Cpu size={13} className={cn(selected ? 'text-info' : 'text-accent')} />
-          <span className="max-w-[190px] truncate">{autoLabel}</span>
-          <ChevronDown size={13} className="text-dim" />
+          <Cpu size={13} className={cn('shrink-0', selected ? 'text-info' : 'text-accent')} />
+          <span className="max-w-[138px] sm:max-w-[200px] min-w-0 truncate">{autoLabel}</span>
+          <ChevronDown size={13} className="shrink-0 text-dim" />
         </button>
       )}
     >

@@ -102,11 +102,12 @@ export function AuthGate() {
         },
       });
       googleBtnRef.current.innerHTML = '';
+      const btnWidth = Math.min(360, Math.max(220, (googleBtnRef.current.clientWidth || 320) - 8));
       window.google.accounts.id.renderButton(googleBtnRef.current, {
         theme: 'filled_black',
         size: 'large',
         shape: 'pill',
-        width: 360,
+        width: btnWidth,
         text: mode === 'register' ? 'signup_with' : 'signin_with',
         locale: isAr ? 'ar' : 'en',
       });
@@ -215,9 +216,9 @@ export function AuthGate() {
   };
 
   return (
-    <div className="relative flex min-h-full w-full flex-col items-center justify-center overflow-y-auto bg-bg px-4 py-8">
+    <div className="scroll-thin relative flex h-full w-full flex-col items-center overflow-y-auto bg-bg px-3.5 py-6 sm:px-4 sm:py-8 pb-safe">
       {/* Top-right language switch */}
-      <div className="absolute end-4 top-4">
+      <div className="mb-3 flex w-full max-w-[430px] justify-end sm:mb-0 sm:w-auto sm:absolute sm:end-4 sm:top-4">
         <button
           type="button"
           onClick={() => void setLocale(isAr ? 'en' : 'ar')}
@@ -228,7 +229,7 @@ export function AuthGate() {
         </button>
       </div>
 
-      <div className="w-full max-w-[430px] rounded-2xl border border-line bg-surface p-6 shadow-2xl">
+      <div className="my-auto w-full max-w-[430px] rounded-2xl border border-line bg-surface p-4 sm:p-6 shadow-2xl">
         {/* Brand Header */}
         <div className="mb-5 flex flex-col items-center text-center">
           <div className="mb-3 grid h-12 w-12 place-items-center rounded-2xl bg-accent/15 text-accent ring-1 ring-accent/30">

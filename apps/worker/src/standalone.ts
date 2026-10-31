@@ -230,6 +230,7 @@ function envFromProcess(): RawEnv {
   const env: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(process.env)) if (v !== undefined) env[k] = v;
   env.NOVA_RUNTIME = 'node';
+  env.NOVA_VERSION ??= '0.4.2';
   if (env.NOVA_SANDBOX === 'worker' && !env.SANDBOX) {
     env.SANDBOX = createLocalVmSandboxBinding();
   }
@@ -243,8 +244,10 @@ function assetResponse(body: string, mime: string, method: string): Response {
     headers: {
       'content-type': mime,
       'content-length': String(buf.byteLength),
-      // hashed assets are immutable; index.html must always revalidate
-      'cache-control': mime.startsWith('text/html') ? 'no-cache' : 'public, max-age=31536000, immutable',
+      // hashed assets are immutable; index.html must never be served stale
+      'cache-control': mime.startsWith('text/html')
+        ? 'no-store, no-cache, must-revalidate, max-age=0'
+        : 'public, max-age=31536000, immutable',
     },
   });
 }

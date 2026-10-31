@@ -40,10 +40,10 @@ export const MessageBubble = memo(function MessageBubble({
   };
 
   return (
-    <div className={cn('group flex gap-3', isUser ? 'flex-row-reverse' : 'flex-row')}>
+    <div className={cn('group flex gap-2 sm:gap-3', isUser ? 'flex-row-reverse' : 'flex-row')}>
       <Avatar role={message.role} />
 
-      <div className={cn('flex min-w-0 max-w-[min(760px,88%)] flex-col gap-1', isUser && 'items-end')}>
+      <div className={cn('flex min-w-0 max-w-[calc(100%-2.25rem)] sm:max-w-[min(760px,88%)] flex-col gap-1', isUser && 'items-end')}>
         <div className={cn('flex items-center gap-2 text-[11px] text-dim', isUser && 'flex-row-reverse')}>
           <span className="font-medium text-muted">
             {isUser ? t('chat.you') : isTool ? t('chat.tool') : t('chat.assistant')}
@@ -111,7 +111,7 @@ export const MessageBubble = memo(function MessageBubble({
                           rel="noreferrer"
                           className="block overflow-hidden rounded-lg border border-line bg-black/30"
                         >
-                          <img src={mediaSrc} alt={a.name} className="max-h-48 max-w-[260px] object-cover" loading="lazy" />
+                          <img src={mediaSrc} alt={a.name} className="max-h-48 max-w-full sm:max-w-[260px] object-cover" loading="lazy" />
                         </a>
                       );
                     }
@@ -122,7 +122,7 @@ export const MessageBubble = memo(function MessageBubble({
                             src={mediaSrc}
                             controls
                             preload="metadata"
-                            className="max-h-56 max-w-[320px]"
+                            className="max-h-56 max-w-full sm:max-w-[320px]"
                           />
                         </div>
                       );
@@ -130,7 +130,7 @@ export const MessageBubble = memo(function MessageBubble({
                     return (
                       <span key={a.id} className="chip !py-1">
                         <Paperclip size={11} />
-                        <span className="max-w-[180px] truncate">{a.name}</span>
+                        <span className="max-w-[140px] sm:max-w-[180px] truncate">{a.name}</span>
                         <span className="text-dim">{formatNumber(a.size)}B</span>
                       </span>
                     );
@@ -141,7 +141,7 @@ export const MessageBubble = memo(function MessageBubble({
         </div>
 
         {!isUser && !isStreaming ? (
-          <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
+          <div className="flex flex-wrap items-center gap-1 opacity-100 sm:opacity-0 transition-opacity sm:group-hover:opacity-100 focus-within:opacity-100">
             <button
               type="button"
               onClick={copy}
@@ -221,8 +221,8 @@ function Avatar({ role }: { role: ChatMessage['role'] }) {
         ? 'bg-warning/12 text-warning border-warning/25'
         : 'bg-accent/15 text-accent border-accent/25';
   return (
-    <div className={cn('mt-5 grid h-7 w-7 shrink-0 place-items-center rounded-lg border', styles)}>
-      {role === 'user' ? <User size={14} /> : role === 'tool' ? <Wrench size={13} /> : <Bot size={14} />}
+    <div className={cn('mt-5 grid h-6 w-6 sm:h-7 sm:w-7 shrink-0 place-items-center rounded-lg border', styles)}>
+      {role === 'user' ? <User size={13} /> : role === 'tool' ? <Wrench size={12} /> : <Bot size={13} />}
     </div>
   );
 }

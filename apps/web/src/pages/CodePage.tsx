@@ -58,6 +58,7 @@ export function CodePage() {
 
   const wide = useMediaQuery('(min-width: 1280px)');
   const medium = useMediaQuery('(min-width: 900px)');
+  const isMobile = useMediaQuery('(max-width: 859px)');
 
   const [leftTab, setLeftTab] = useState<LeftTab>('files');
   const [rightTab, setRightTab] = useState<RightTab>('agent');
@@ -146,22 +147,45 @@ export function CodePage() {
 
   if (!activeProjectId) {
     return (
-      <div className="flex h-full items-center justify-center p-6">
-        <div className="w-full max-w-md">
-          <EmptyState
-            icon={<FolderKanban size={26} />}
-            title={t('code.selectProject')}
-            hint={t('code.noProjectHint')}
-          />
-          {projects.length > 0 ? (
-            <div className="mt-2 flex flex-wrap justify-center gap-1.5">
-              {projects.map((p) => (
-                <Button key={p.id} size="sm" variant="outline" onClick={() => void selectProject(p.id)}>
-                  {p.name}
-                </Button>
-              ))}
-            </div>
-          ) : null}
+      <div className="flex h-full min-h-0 flex-col">
+        {isMobile ? (
+          <header className="flex h-[52px] shrink-0 items-center gap-2 border-b border-line bg-surface/80 px-2.5 backdrop-blur">
+            <button
+              type="button"
+              onClick={() => setMobileSidebarOpen(true)}
+              className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-muted transition-colors hover:bg-elevated hover:text-text"
+              title={t('nav.projects')}
+              aria-label={t('nav.projects')}
+            >
+              <Menu size={19} />
+            </button>
+            <h1 className="truncate text-[13.5px] font-medium">{t('nav.code')}</h1>
+          </header>
+        ) : null}
+        <div className="flex flex-1 items-center justify-center overflow-y-auto p-6">
+          <div className="w-full max-w-md">
+            <EmptyState
+              icon={<FolderKanban size={26} />}
+              title={t('code.selectProject')}
+              hint={t('code.noProjectHint')}
+              action={
+                isMobile ? (
+                  <Button size="sm" variant="primary" onClick={() => setMobileSidebarOpen(true)}>
+                    {t('nav.projects')}
+                  </Button>
+                ) : undefined
+              }
+            />
+            {projects.length > 0 ? (
+              <div className="mt-2 flex flex-wrap justify-center gap-1.5">
+                {projects.map((p) => (
+                  <Button key={p.id} size="sm" variant="outline" onClick={() => void selectProject(p.id)}>
+                    {p.name}
+                  </Button>
+                ))}
+              </div>
+            ) : null}
+          </div>
         </div>
       </div>
     );
@@ -188,15 +212,18 @@ export function CodePage() {
   return (
     <div className="flex h-full min-h-0 flex-col">
       {/* ------------------------------------------------------- project bar */}
-      <header className="flex h-[52px] shrink-0 items-center gap-2 border-b border-line bg-surface/70 px-3 backdrop-blur">
-        <button
-          type="button"
-          onClick={() => setMobileSidebarOpen(true)}
-          className="inline-flex items-center justify-center rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-text md:hidden"
-          title={t('nav.conversations')}
-        >
-          <Menu size={18} />
-        </button>
+      <header className="flex h-[52px] shrink-0 items-center gap-1.5 sm:gap-2 border-b border-line bg-surface/80 px-2.5 sm:px-3 backdrop-blur">
+        {isMobile ? (
+          <button
+            type="button"
+            onClick={() => setMobileSidebarOpen(true)}
+            className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-muted transition-colors hover:bg-elevated hover:text-text"
+            title={t('nav.projects')}
+            aria-label={t('nav.projects')}
+          >
+            <Menu size={19} />
+          </button>
+        ) : null}
 
         <Dropdown
           width={260}
@@ -205,12 +232,12 @@ export function CodePage() {
               type="button"
               onClick={toggle}
               className={cn(
-                'flex items-center gap-2 rounded-lg border border-line-strong bg-elevated px-2.5 py-1.5 text-[12.5px] transition-colors hover:border-[#46505e]',
+                'flex min-w-0 items-center gap-1.5 sm:gap-2 rounded-lg border border-line-strong bg-elevated px-2 sm:px-2.5 py-1.5 text-[12px] sm:text-[12.5px] transition-colors hover:border-[#46505e]',
                 open && 'border-accent/50',
               )}
             >
-              <FolderKanban size={14} className="text-accent" />
-              <span className="max-w-[160px] truncate font-medium">{project?.name ?? '—'}</span>
+              <FolderKanban size={14} className="shrink-0 text-accent" />
+              <span className="max-w-[115px] sm:max-w-[160px] truncate font-medium">{project?.name ?? '—'}</span>
               {loading ? <Spinner size={11} /> : null}
             </button>
           )}
@@ -236,23 +263,69 @@ export function CodePage() {
           ) : null}
         </div>
 
-        <div className="ms-auto flex items-center gap-1">
-          <IconButton label={t('code.files')} className={cn(!medium && 'flex')} onClick={() => setLeftOpen((v) => !v)} active={leftOpen}>
+        <div className="ms-auto flex shrink-0 items-center gap-1">
+          <IconButton
+            label={t('code.files')}
+            onClick={() => {
+              setLeftOpen((v) => {
+                const next = !v;
+                if (next && !medium) setRightOpen(false);
+                return next;
+              });
+            }}
+            active={leftOpen}
+          >
             <FileCode2 size={15} />
           </IconButton>
-          <IconButton label={t('code.search')} onClick={() => { setLeftTab('search'); setLeftOpen(true); }}>
+          <IconButton
+            label={t('code.search')}
+            onClick={() => {
+              setLeftTab('search');
+              setLeftOpen(true);
+              if (!medium) setRightOpen(false);
+            }}
+          >
             <Search size={15} />
           </IconButton>
-          <IconButton label={t('agent.title')} onClick={() => setRightOpen((v) => !v)} active={rightOpen}>
+          <IconButton
+            label={t('agent.title')}
+            onClick={() => {
+              setRightOpen((v) => {
+                const next = !v;
+                if (next && !medium) setLeftOpen(false);
+                return next;
+              });
+            }}
+            active={rightOpen}
+          >
             <PanelRight size={15} />
           </IconButton>
         </div>
       </header>
 
-      <div className="flex min-h-0 flex-1">
+      <div className="relative flex min-h-0 flex-1">
+        {/* Mobile/tablet backdrop when a rail drawer is open */}
+        {!medium && (leftOpen || rightOpen) ? (
+          <div
+            className="fixed inset-x-0 bottom-0 top-[52px] z-20 bg-black/60 backdrop-blur-[1px]"
+            onClick={() => {
+              setLeftOpen(false);
+              setRightOpen(false);
+            }}
+            aria-hidden
+          />
+        ) : null}
+
         {/* ------------------------------------------------------ left rail */}
         {leftOpen ? (
-          <aside className="flex w-[248px] shrink-0 flex-col border-e border-line bg-surface/40">
+          <aside
+            className={cn(
+              'flex shrink-0 flex-col border-e border-line',
+              medium
+                ? 'w-[248px] bg-surface/40'
+                : 'animate-in fixed bottom-0 start-0 top-[52px] z-30 w-[min(280px,86vw)] bg-surface shadow-2xl pb-safe',
+            )}
+          >
             <div className="flex shrink-0 items-center gap-1 border-b border-line px-2 py-1.5">
               <Segmented
                 value={leftTab}
@@ -270,6 +343,11 @@ export function CodePage() {
                 <IconButton label={t('code.uploadFiles')} onClick={() => uploadRef.current?.click()}>
                   <Upload size={13} />
                 </IconButton>
+                {!medium ? (
+                  <IconButton label={t('common.close')} onClick={() => setLeftOpen(false)}>
+                    <X size={14} />
+                  </IconButton>
+                ) : null}
               </span>
             </div>
             <div className="scroll-thin min-h-0 flex-1">
@@ -279,7 +357,10 @@ export function CodePage() {
                   activePath={activePath}
                   flags={flags}
                   emptyLabel={t('common.empty')}
-                  onOpen={(p) => void openFile(p)}
+                  onOpen={(p) => {
+                    void openFile(p);
+                    if (!medium) setLeftOpen(false);
+                  }}
                   onDelete={(p) => setDeletingPath(p)}
                 />
               ) : (
@@ -314,7 +395,10 @@ export function CodePage() {
                 <button
                   type="button"
                   onClick={() => closeFile(f.path)}
-                  className="shrink-0 rounded p-0.5 text-dim opacity-0 transition-opacity hover:text-danger group-hover:opacity-100"
+                  className={cn(
+                    'shrink-0 rounded p-0.5 text-dim transition-opacity hover:text-danger',
+                    f.path === activePath ? 'opacity-100 md:opacity-0 md:group-hover:opacity-100' : 'opacity-65 md:opacity-0 md:group-hover:opacity-100',
+                  )}
                   aria-label={t('common.close')}
                 >
                   <X size={11} />
@@ -435,8 +519,15 @@ export function CodePage() {
 
         {/* ----------------------------------------------------- right rail */}
         {rightOpen ? (
-          <aside className="flex w-[min(400px,38vw)] shrink-0 flex-col border-s border-line bg-surface/40">
-            <div className="flex shrink-0 items-stretch gap-px overflow-x-auto border-b border-line">
+          <aside
+            className={cn(
+              'flex shrink-0 flex-col border-s border-line',
+              medium
+                ? 'w-[min(400px,38vw)] bg-surface/40'
+                : 'animate-in fixed bottom-0 end-0 top-[52px] z-30 w-[min(390px,92vw)] bg-surface shadow-2xl pb-safe',
+            )}
+          >
+            <div className="flex shrink-0 items-stretch gap-px overflow-x-auto no-scrollbar border-b border-line">
               <RailTab active={rightTab === 'agent'} onClick={() => setRightTab('agent')} icon={<Bot size={13} />} label={t('code.agent')} />
               <RailTab
                 active={rightTab === 'changes'}
@@ -454,6 +545,16 @@ export function CodePage() {
               />
               <RailTab active={rightTab === 'terminal'} onClick={() => setRightTab('terminal')} icon={<TerminalIcon size={13} />} label={t('code.terminal')} />
               <RailTab active={rightTab === 'git'} onClick={() => setRightTab('git')} icon={<GitBranch size={13} />} label={t('code.git')} />
+              {!medium ? (
+                <button
+                  type="button"
+                  onClick={() => setRightOpen(false)}
+                  className="ms-auto flex shrink-0 items-center px-2.5 text-dim hover:text-text"
+                  aria-label={t('common.close')}
+                >
+                  <X size={15} />
+                </button>
+              ) : null}
             </div>
             <div className="min-h-0 flex-1">
               {rightTab === 'agent' ? <AgentPanel /> : null}

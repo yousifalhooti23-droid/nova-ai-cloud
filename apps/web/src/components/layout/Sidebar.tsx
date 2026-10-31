@@ -6,6 +6,7 @@ import {
 import { useI18n } from '@/i18n';
 import { cn } from '@/lib/cn';
 import { relativeTime } from '@/lib/format';
+import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { useAppStore } from '@/store/app';
 import { useChatStore } from '@/store/chat';
 import { useCodeStore } from '@/store/code';
@@ -27,17 +28,26 @@ export function Sidebar() {
   const logout = useAppStore((s) => s.logout);
   const isAr = locale === 'ar';
 
+  const isMobile = useMediaQuery('(max-width: 859px)');
+  const isCollapsedDesktop = !isMobile && collapsed;
+
   const readyProviders = useMemo(
     () => (health?.providers ?? []).filter((p) => p.status === 'ready'),
     [health],
   );
 
+  // On mobile phones (< 860px), do not mount the sidebar at all unless opened as a drawer.
+  // This guarantees zero flex width consumption and zero RTL/LTR CSS translate bugs.
+  if (isMobile && !mobileOpen) {
+    return null;
+  }
+
   return (
     <>
       {/* Mobile Backdrop */}
-      {mobileOpen ? (
+      {isMobile ? (
         <div
-          className="fixed inset-0 z-40 bg-black/70 backdrop-blur-sm transition-opacity md:hidden animate-in fade-in duration-200"
+          className="fixed inset-0 z-40 bg-black/75 backdrop-blur-[2px] animate-in"
           onClick={() => setMobileOpen(false)}
           aria-hidden
         />
@@ -46,39 +56,41 @@ export function Sidebar() {
       <aside
         className={cn(
           'flex h-full flex-col border-e border-line bg-surface transition-all duration-200',
-          // Mobile: floating slide-over drawer
-          'fixed inset-y-0 start-0 z-50 w-[285px] max-w-[85vw] shadow-2xl md:static md:z-auto md:max-w-none md:shadow-none',
-          mobileOpen ? 'translate-x-0' : 'max-md:-translate-x-full max-md:rtl:translate-x-full',
-          // Desktop: collapse vs expand
-          collapsed ? 'md:w-[58px]' : 'md:w-[262px]',
+          isMobile
+            ? 'animate-in fixed inset-y-0 start-0 z-50 w-[min(290px,84vw)] shadow-2xl pb-safe'
+            : isCollapsedDesktop
+              ? 'w-[58px] shrink-0'
+              : 'w-[262px] shrink-0',
         )}
       >
         {/* Brand */}
-        <div className="flex h-[52px] items-center gap-2 border-b border-line px-3">
+        <div className="flex h-[52px] shrink-0 items-center gap-2 border-b border-line px-3">
           <div className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-accent/15 text-accent">
             <Sparkles size={15} />
           </div>
-          {(!collapsed || mobileOpen) && (
+          {!isCollapsedDesktop && (
             <div className="min-w-0 flex-1">
               <p className="truncate text-[13px] font-semibold leading-tight">NOVA</p>
               <p className="truncate text-[10.5px] leading-tight text-dim">AI Cloud</p>
             </div>
           )}
           <div className="ms-auto flex items-center">
-            <IconButton
-              label={t('common.close')}
-              onClick={() => setMobileOpen(false)}
-              className="md:hidden"
-            >
-              <X size={16} />
-            </IconButton>
-            <IconButton
-              label={collapsed ? t('nav.expand') : t('nav.collapse')}
-              onClick={toggle}
-              className={cn('hidden md:inline-flex', collapsed && 'mx-auto')}
-            >
-              {collapsed ? <PanelLeft size={15} /> : <PanelLeftClose size={15} />}
-            </IconButton>
+            {isMobile ? (
+              <IconButton
+                label={t('common.close')}
+                onClick={() => setMobileOpen(false)}
+              >
+                <X size={17} />
+              </IconButton>
+            ) : (
+              <IconButton
+                label={collapsed ? t('nav.expand') : t('nav.collapse')}
+                onClick={toggle}
+                className={cn(collapsed && 'mx-auto')}
+              >
+                {collapsed ? <PanelLeft size={15} /> : <PanelLeftClose size={15} />}
+              </IconButton>
+            )}
           </div>
         </div>
 
@@ -86,7 +98,7 @@ export function Sidebar() {
         <nav className="flex flex-col gap-1 p-2">
           <NavItem
             active={view === 'chat'}
-            collapsed={collapsed && !mobileOpen}
+            collapsed={isCollapsedDesktop}
             icon={<MessageSquare size={16} />}
             label={t('nav.chat')}
             onClick={() => {
@@ -96,7 +108,7 @@ export function Sidebar() {
           />
           <NavItem
             active={view === 'code'}
-            collapsed={collapsed && !mobileOpen}
+            collapsed={isCollapsedDesktop}
             icon={<Code2 size={16} />}
             label={t('nav.code')}
             onClick={() => {
@@ -111,15 +123,15 @@ export function Sidebar() {
         {/* Contextual list */}
         <div className="scroll-thin min-h-0 flex-1">
           {view === 'chat' ? (
-            <ConversationList collapsed={collapsed && !mobileOpen} onSelect={() => setMobileOpen(false)} />
+            <ConversationList collapsed={isCollapsedDesktop} onSelect={() => setMobileOpen(false)} />
           ) : (
-            <ProjectList collapsed={collapsed && !mobileOpen} onSelect={() => setMobileOpen(false)} />
+            <ProjectList collapsed={isCollapsedDesktop} onSelect={() => setMobileOpen(false)} />
           )}
         </div>
 
         {/* Footer */}
         <div className="border-t border-line p-2">
-          {authUser && (!collapsed || mobileOpen) ? (
+          {authUser && !isCollapsedDesktop ? (
             <div className="mb-2 rounded-xl border border-line bg-bg/60 p-2.5">
               <div className="flex items-center gap-2">
                 <button
@@ -200,7 +212,7 @@ export function Sidebar() {
             </div>
           ) : null}
 
-          {(!collapsed || mobileOpen) && (
+          {!isCollapsedDesktop && (
             <button
               type="button"
               onClick={() => {
@@ -220,14 +232,14 @@ export function Sidebar() {
               </span>
             </button>
           )}
-          <div className={cn('flex items-center gap-1', collapsed && !mobileOpen && 'flex-col')}>
+          <div className={cn('flex items-center gap-1', isCollapsedDesktop && 'flex-col')}>
             <IconButton
               label={t('nav.settings')}
               onClick={() => {
                 openSettings(true);
                 setMobileOpen(false);
               }}
-              className={cn(collapsed && !mobileOpen && 'w-full')}
+              className={cn(isCollapsedDesktop && 'w-full')}
             >
               <Settings size={15} />
             </IconButton>
@@ -238,7 +250,7 @@ export function Sidebar() {
                   openSettings(true, 'account');
                   setMobileOpen(false);
                 }}
-                className={cn(collapsed && !mobileOpen && 'w-full')}
+                className={cn(isCollapsedDesktop && 'w-full')}
               >
                 <ShieldCheck size={15} />
               </IconButton>
@@ -246,11 +258,11 @@ export function Sidebar() {
             <IconButton
               label={t('settings.language')}
               onClick={() => setLocale(locale === 'ar' ? 'en' : 'ar')}
-              className={cn(collapsed && !mobileOpen && 'w-full')}
+              className={cn(isCollapsedDesktop && 'w-full')}
             >
               <Globe size={15} />
             </IconButton>
-            {authUser && collapsed && !mobileOpen ? (
+            {authUser && isCollapsedDesktop ? (
               <IconButton
                 label={isAr ? 'تسجيل الخروج' : 'Sign Out'}
                 onClick={() => void logout()}
@@ -259,7 +271,7 @@ export function Sidebar() {
                 <LogOut size={15} />
               </IconButton>
             ) : null}
-            {(!collapsed || mobileOpen) && (
+            {!isCollapsedDesktop && (
               <span className="ms-auto rounded-md border border-line-strong bg-elevated px-1.5 py-0.5 font-mono text-[10px] text-dim">
                 {locale.toUpperCase()}
               </span>
@@ -379,7 +391,12 @@ function ConversationList({ collapsed, onSelect }: { collapsed: boolean; onSelec
                     {c.messageCount ? ` · ${c.messageCount}` : ''}
                   </span>
                 </button>
-                <span className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
+                <span
+                  className={cn(
+                    'flex shrink-0 items-center gap-0.5 transition-opacity focus-within:opacity-100',
+                    c.id === activeId ? 'opacity-100 md:opacity-0 md:group-hover:opacity-100' : 'opacity-65 md:opacity-0 md:group-hover:opacity-100',
+                  )}
+                >
                   <IconButton
                     label={t('common.rename')}
                     className="!px-1 !py-1"
@@ -537,7 +554,12 @@ function ProjectList({ collapsed, onSelect }: { collapsed: boolean; onSelect?: (
                     {p.stats?.pendingChanges ? ` · ${p.stats.pendingChanges} ${t('changes.pending')}` : ''}
                   </span>
                 </button>
-                <span className="flex shrink-0 items-center opacity-0 transition-opacity group-hover:opacity-100">
+                <span
+                  className={cn(
+                    'flex shrink-0 items-center transition-opacity focus-within:opacity-100',
+                    p.id === activeProjectId ? 'opacity-100 md:opacity-0 md:group-hover:opacity-100' : 'opacity-65 md:opacity-0 md:group-hover:opacity-100',
+                  )}
+                >
                   <IconButton label={t('common.delete')} className="!px-1 !py-1" onClick={() => setDeleting(p.id)}>
                     <Trash2 size={12} />
                   </IconButton>

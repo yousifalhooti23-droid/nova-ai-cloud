@@ -30,7 +30,21 @@ export default {
       return app.fetch(request, env, ctx);
     }
     if (env.ASSETS) {
-      return (env.ASSETS as { fetch(req: Request): Promise<Response> }).fetch(request);
+      const assetRes = await (env.ASSETS as { fetch(req: Request): Promise<Response> }).fetch(request);
+      const headers = new Headers(assetRes.headers);
+      if (url.pathname.startsWith('/assets/')) {
+        headers.set('Cache-Control', 'public, max-age=31536000, immutable');
+      } else {
+        headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
+        headers.set('CDN-Cache-Control', 'no-store');
+        headers.set('Pragma', 'no-cache');
+        headers.set('Expires', '0');
+      }
+      return new Response(assetRes.body, {
+        status: assetRes.status,
+        statusText: assetRes.statusText,
+        headers,
+      });
     }
     if (url.pathname === '/') {
       return new Response(

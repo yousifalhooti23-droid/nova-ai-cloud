@@ -11,6 +11,9 @@ import { fileURLToPath } from 'node:url';
 const WORKER_URL = process.env.NOVA_WORKER_URL ?? 'http://127.0.0.1:8787';
 
 export default defineConfig({
+  define: {
+    __NOVA_BUILD_VERSION__: JSON.stringify('0.4.2'),
+  },
   plugins: [react(), tailwindcss()],
   resolve: {
     alias: {
