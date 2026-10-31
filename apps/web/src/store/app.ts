@@ -112,10 +112,10 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   async init() {
     if (get().ready) return;
-    await Promise.all([get().refreshHealth(), get().refreshAuth()]);
+    await Promise.all([get().refreshHealth(), get().refreshAuth(), get().refreshModels()]);
     const { health, authUser } = get();
     if (!health?.userAuthEnabled || authUser) {
-      await Promise.all([get().refreshModels(), get().loadSandbox(), get().loadSettings()]);
+      await Promise.all([get().loadSandbox(), get().loadSettings()]);
     }
     set({ ready: true });
   },

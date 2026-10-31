@@ -18,6 +18,8 @@ import { ScopedStore } from './storage/scoped-store.js';
 
 const PUBLIC_AUTH_PATHS = new Set([
   '/api/health',
+  '/api/models',
+  '/api/models/workers-ai-probe',
   '/api/auth/config',
   '/api/auth/me',
   '/api/auth/login',

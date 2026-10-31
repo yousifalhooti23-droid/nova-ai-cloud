@@ -274,6 +274,12 @@ function ProvidersTab() {
   const [baseUrlInput, setBaseUrlInput] = useState('');
 
   useEffect(() => {
+    if (!models) {
+      void refreshModels();
+    }
+  }, [models, refreshModels]);
+
+  useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
@@ -491,6 +497,13 @@ function ProvidersTab() {
           const ready = new Set(providers.filter((p) => p.status === 'ready').map((p) => p.id));
           const list = (models?.models ?? []).filter((m) => ready.has(m.provider) && m.access === 'open');
           if (list.length === 0) {
+            if (!models && ready.size > 0) {
+              return (
+                <div className="flex items-center gap-2 py-1 text-dim">
+                  <Spinner size={12} /> <span className="text-[11.5px]">{t('common.loading')}</span>
+                </div>
+              );
+            }
             return (
               <div className="flex items-start gap-2">
                 <Badge tone="warning">{t('providers.noCallable')}</Badge>
