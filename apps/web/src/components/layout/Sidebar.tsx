@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   Code2, Crown, FolderKanban, Globe, LogOut, MessageSquare, PanelLeft, PanelLeftClose, Pencil, Plus,
-  Settings, Trash2, Sparkles, Bot, ShieldCheck,
+  Settings, Trash2, Sparkles, Bot, ShieldCheck, X,
 } from 'lucide-react';
 import { useI18n } from '@/i18n';
 import { cn } from '@/lib/cn';
@@ -17,6 +17,8 @@ export function Sidebar() {
   const setView = useAppStore((s) => s.setView);
   const collapsed = useAppStore((s) => s.sidebarCollapsed);
   const toggle = useAppStore((s) => s.toggleSidebar);
+  const mobileOpen = useAppStore((s) => s.mobileSidebarOpen);
+  const setMobileOpen = useAppStore((s) => s.setMobileSidebarOpen);
   const openSettings = useAppStore((s) => s.openSettings);
   const health = useAppStore((s) => s.health);
   const offline = useAppStore((s) => s.offline);
@@ -31,187 +33,241 @@ export function Sidebar() {
   );
 
   return (
-    <aside
-      className={cn(
-        'flex h-full shrink-0 flex-col border-e border-line bg-surface transition-[width] duration-200',
-        collapsed ? 'w-[58px]' : 'w-[262px]',
-      )}
-    >
-      {/* Brand */}
-      <div className="flex h-[52px] items-center gap-2 border-b border-line px-3">
-        <div className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-accent/15 text-accent">
-          <Sparkles size={15} />
-        </div>
-        {!collapsed && (
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-[13px] font-semibold leading-tight">NOVA</p>
-            <p className="truncate text-[10.5px] leading-tight text-dim">AI Cloud</p>
-          </div>
+    <>
+      {/* Mobile Backdrop */}
+      {mobileOpen ? (
+        <div
+          className="fixed inset-0 z-40 bg-black/70 backdrop-blur-sm transition-opacity md:hidden animate-in fade-in duration-200"
+          onClick={() => setMobileOpen(false)}
+          aria-hidden
+        />
+      ) : null}
+
+      <aside
+        className={cn(
+          'flex h-full flex-col border-e border-line bg-surface transition-all duration-200',
+          // Mobile: floating slide-over drawer
+          'fixed inset-y-0 start-0 z-50 w-[285px] max-w-[85vw] shadow-2xl md:static md:z-auto md:max-w-none md:shadow-none',
+          mobileOpen ? 'translate-x-0' : 'max-md:-translate-x-full max-md:rtl:translate-x-full',
+          // Desktop: collapse vs expand
+          collapsed ? 'md:w-[58px]' : 'md:w-[262px]',
         )}
-        <IconButton label={collapsed ? t('nav.expand') : t('nav.collapse')} onClick={toggle} className={cn(collapsed && 'mx-auto')}>
-          {collapsed ? <PanelLeft size={15} /> : <PanelLeftClose size={15} />}
-        </IconButton>
-      </div>
+      >
+        {/* Brand */}
+        <div className="flex h-[52px] items-center gap-2 border-b border-line px-3">
+          <div className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-accent/15 text-accent">
+            <Sparkles size={15} />
+          </div>
+          {(!collapsed || mobileOpen) && (
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-[13px] font-semibold leading-tight">NOVA</p>
+              <p className="truncate text-[10.5px] leading-tight text-dim">AI Cloud</p>
+            </div>
+          )}
+          <div className="ms-auto flex items-center">
+            <IconButton
+              label={t('common.close')}
+              onClick={() => setMobileOpen(false)}
+              className="md:hidden"
+            >
+              <X size={16} />
+            </IconButton>
+            <IconButton
+              label={collapsed ? t('nav.expand') : t('nav.collapse')}
+              onClick={toggle}
+              className={cn('hidden md:inline-flex', collapsed && 'mx-auto')}
+            >
+              {collapsed ? <PanelLeft size={15} /> : <PanelLeftClose size={15} />}
+            </IconButton>
+          </div>
+        </div>
 
-      {/* Primary nav */}
-      <nav className="flex flex-col gap-1 p-2">
-        <NavItem
-          active={view === 'chat'}
-          collapsed={collapsed}
-          icon={<MessageSquare size={16} />}
-          label={t('nav.chat')}
-          onClick={() => setView('chat')}
-        />
-        <NavItem
-          active={view === 'code'}
-          collapsed={collapsed}
-          icon={<Code2 size={16} />}
-          label={t('nav.code')}
-          onClick={() => setView('code')}
-        />
-      </nav>
+        {/* Primary nav */}
+        <nav className="flex flex-col gap-1 p-2">
+          <NavItem
+            active={view === 'chat'}
+            collapsed={collapsed && !mobileOpen}
+            icon={<MessageSquare size={16} />}
+            label={t('nav.chat')}
+            onClick={() => {
+              setView('chat');
+              setMobileOpen(false);
+            }}
+          />
+          <NavItem
+            active={view === 'code'}
+            collapsed={collapsed && !mobileOpen}
+            icon={<Code2 size={16} />}
+            label={t('nav.code')}
+            onClick={() => {
+              setView('code');
+              setMobileOpen(false);
+            }}
+          />
+        </nav>
 
-      <div className="mx-3 h-px bg-line" />
+        <div className="mx-3 h-px bg-line" />
 
-      {/* Contextual list */}
-      <div className="scroll-thin min-h-0 flex-1">
-        {view === 'chat' ? <ConversationList collapsed={collapsed} /> : <ProjectList collapsed={collapsed} />}
-      </div>
+        {/* Contextual list */}
+        <div className="scroll-thin min-h-0 flex-1">
+          {view === 'chat' ? (
+            <ConversationList collapsed={collapsed && !mobileOpen} onSelect={() => setMobileOpen(false)} />
+          ) : (
+            <ProjectList collapsed={collapsed && !mobileOpen} onSelect={() => setMobileOpen(false)} />
+          )}
+        </div>
 
-      {/* Footer */}
-      <div className="border-t border-line p-2">
-        {authUser && !collapsed ? (
-          <div className="mb-2 rounded-xl border border-line bg-bg/60 p-2.5">
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => openSettings(true, 'account')}
-                className="flex min-w-0 flex-1 items-center gap-2 text-start"
-                title={isAr ? 'حسابي والأمان' : 'Account & Security'}
-              >
-                <div
-                  className={cn(
-                    'grid h-7 w-7 shrink-0 place-items-center rounded-lg text-[11px] font-bold',
-                    authUser.role === 'owner'
-                      ? 'bg-amber-500/20 text-amber-300 ring-1 ring-amber-400/35'
-                      : 'bg-accent/15 text-accent',
-                  )}
+        {/* Footer */}
+        <div className="border-t border-line p-2">
+          {authUser && (!collapsed || mobileOpen) ? (
+            <div className="mb-2 rounded-xl border border-line bg-bg/60 p-2.5">
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    openSettings(true, 'account');
+                    setMobileOpen(false);
+                  }}
+                  className="flex min-w-0 flex-1 items-center gap-2 text-start"
+                  title={isAr ? 'حسابي والأمان' : 'Account & Security'}
                 >
-                  {authUser.role === 'owner' ? <Crown size={14} /> : authUser.displayName.slice(0, 1).toUpperCase()}
+                  <div
+                    className={cn(
+                      'grid h-7 w-7 shrink-0 place-items-center rounded-lg text-[11px] font-bold',
+                      authUser.role === 'owner'
+                        ? 'bg-amber-500/20 text-amber-300 ring-1 ring-amber-400/35'
+                        : 'bg-accent/15 text-accent',
+                    )}
+                  >
+                    {authUser.role === 'owner' ? <Crown size={14} /> : authUser.displayName.slice(0, 1).toUpperCase()}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-[12px] font-semibold text-text">{authUser.displayName}</p>
+                    <p className="truncate text-[10px] text-dim">{authUser.email}</p>
+                  </div>
+                </button>
+                <IconButton
+                  label={isAr ? 'تسجيل الخروج' : 'Sign Out'}
+                  onClick={() => void logout()}
+                  className="shrink-0 text-dim hover:text-danger"
+                >
+                  <LogOut size={13} />
+                </IconButton>
+              </div>
+
+              {authUser.role === 'owner' ? (
+                <div className="mt-2 flex items-center justify-between rounded-lg border border-amber-400/25 bg-amber-500/10 px-2 py-1 text-[10.5px] font-medium text-amber-300">
+                  <span>{isAr ? '👑 حساب المالك' : '👑 Owner Account'}</span>
+                  <span>{isAr ? 'غير محدود (∞)' : 'Unlimited (∞)'}</span>
                 </div>
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-[12px] font-semibold text-text">{authUser.displayName}</p>
-                  <p className="truncate text-[10px] text-dim">{authUser.email}</p>
+              ) : (
+                <div className="mt-2">
+                  <div className="mb-1 flex items-center justify-between text-[10.5px]">
+                    <span className="text-muted">{isAr ? 'الاستهلاك اليومي' : 'Daily Quota'}</span>
+                    <span
+                      className={cn(
+                        'font-mono font-semibold',
+                        authUser.quota.locked ? 'text-danger' : 'text-text',
+                      )}
+                    >
+                      {authUser.quota.used} / {authUser.quota.limit}
+                    </span>
+                  </div>
+                  <div className="h-1.5 w-full overflow-hidden rounded-full bg-elevated">
+                    <div
+                      className={cn(
+                        'h-full rounded-full transition-all duration-300',
+                        authUser.quota.locked
+                          ? 'bg-danger'
+                          : authUser.quota.used / Math.max(1, authUser.quota.limit) >= 0.8
+                            ? 'bg-amber-400'
+                            : 'bg-emerald-400',
+                      )}
+                      style={{
+                        width: `${Math.min(100, Math.round((authUser.quota.used / Math.max(1, authUser.quota.limit)) * 100))}%`,
+                      }}
+                    />
+                  </div>
+                  {authUser.quota.locked ? (
+                    <p className="mt-1.5 text-[10px] leading-snug text-danger">
+                      {isAr
+                        ? `⛔ خلاص ما فيه رصيد — يتجدد بعد أسبوع (${authUser.quota.lockedUntil?.slice(0, 10) ?? ''})`
+                        : `⛔ Limit reached — renews in 1 week (${authUser.quota.lockedUntil?.slice(0, 10) ?? ''})`}
+                    </p>
+                  ) : null}
                 </div>
-              </button>
+              )}
+            </div>
+          ) : null}
+
+          {(!collapsed || mobileOpen) && (
+            <button
+              type="button"
+              onClick={() => {
+                openSettings(true);
+                setMobileOpen(false);
+              }}
+              className="card-hover mb-1.5 flex w-full items-center gap-2 rounded-lg border border-line px-2 py-1.5 text-start"
+              title={t('nav.health')}
+            >
+              <Dot tone={offline ? 'danger' : readyProviders.length ? 'success' : 'warning'} pulse={!offline && readyProviders.length > 0} />
+              <span className="min-w-0 flex-1 truncate text-[11.5px] text-muted">
+                {offline
+                  ? t('health.offline')
+                  : readyProviders.length
+                    ? readyProviders.map((p) => p.label).join(' · ')
+                    : t('providers.noCallable')}
+              </span>
+            </button>
+          )}
+          <div className={cn('flex items-center gap-1', collapsed && !mobileOpen && 'flex-col')}>
+            <IconButton
+              label={t('nav.settings')}
+              onClick={() => {
+                openSettings(true);
+                setMobileOpen(false);
+              }}
+              className={cn(collapsed && !mobileOpen && 'w-full')}
+            >
+              <Settings size={15} />
+            </IconButton>
+            {authUser ? (
+              <IconButton
+                label={isAr ? 'حسابي والأمان' : 'Account & Security'}
+                onClick={() => {
+                  openSettings(true, 'account');
+                  setMobileOpen(false);
+                }}
+                className={cn(collapsed && !mobileOpen && 'w-full')}
+              >
+                <ShieldCheck size={15} />
+              </IconButton>
+            ) : null}
+            <IconButton
+              label={t('settings.language')}
+              onClick={() => setLocale(locale === 'ar' ? 'en' : 'ar')}
+              className={cn(collapsed && !mobileOpen && 'w-full')}
+            >
+              <Globe size={15} />
+            </IconButton>
+            {authUser && collapsed && !mobileOpen ? (
               <IconButton
                 label={isAr ? 'تسجيل الخروج' : 'Sign Out'}
                 onClick={() => void logout()}
-                className="shrink-0 text-dim hover:text-danger"
+                className="w-full text-dim hover:text-danger"
               >
-                <LogOut size={13} />
+                <LogOut size={15} />
               </IconButton>
-            </div>
-
-            {authUser.role === 'owner' ? (
-              <div className="mt-2 flex items-center justify-between rounded-lg border border-amber-400/25 bg-amber-500/10 px-2 py-1 text-[10.5px] font-medium text-amber-300">
-                <span>{isAr ? '👑 حساب المالك' : '👑 Owner Account'}</span>
-                <span>{isAr ? 'غير محدود (∞)' : 'Unlimited (∞)'}</span>
-              </div>
-            ) : (
-              <div className="mt-2">
-                <div className="mb-1 flex items-center justify-between text-[10.5px]">
-                  <span className="text-muted">{isAr ? 'الاستهلاك اليومي' : 'Daily Quota'}</span>
-                  <span
-                    className={cn(
-                      'font-mono font-semibold',
-                      authUser.quota.locked ? 'text-danger' : 'text-text',
-                    )}
-                  >
-                    {authUser.quota.used} / {authUser.quota.limit}
-                  </span>
-                </div>
-                <div className="h-1.5 w-full overflow-hidden rounded-full bg-elevated">
-                  <div
-                    className={cn(
-                      'h-full rounded-full transition-all duration-300',
-                      authUser.quota.locked
-                        ? 'bg-danger'
-                        : authUser.quota.used / Math.max(1, authUser.quota.limit) >= 0.8
-                          ? 'bg-amber-400'
-                          : 'bg-emerald-400',
-                    )}
-                    style={{
-                      width: `${Math.min(100, Math.round((authUser.quota.used / Math.max(1, authUser.quota.limit)) * 100))}%`,
-                    }}
-                  />
-                </div>
-                {authUser.quota.locked ? (
-                  <p className="mt-1.5 text-[10px] leading-snug text-danger">
-                    {isAr
-                      ? `⛔ خلاص ما فيه رصيد — يتجدد بعد أسبوع (${authUser.quota.lockedUntil?.slice(0, 10) ?? ''})`
-                      : `⛔ Limit reached — renews in 1 week (${authUser.quota.lockedUntil?.slice(0, 10) ?? ''})`}
-                  </p>
-                ) : null}
-              </div>
+            ) : null}
+            {(!collapsed || mobileOpen) && (
+              <span className="ms-auto rounded-md border border-line-strong bg-elevated px-1.5 py-0.5 font-mono text-[10px] text-dim">
+                {locale.toUpperCase()}
+              </span>
             )}
           </div>
-        ) : null}
-
-        {!collapsed && (
-          <button
-            type="button"
-            onClick={() => openSettings(true)}
-            className="card-hover mb-1.5 flex w-full items-center gap-2 rounded-lg border border-line px-2 py-1.5 text-start"
-            title={t('nav.health')}
-          >
-            <Dot tone={offline ? 'danger' : readyProviders.length ? 'success' : 'warning'} pulse={!offline && readyProviders.length > 0} />
-            <span className="min-w-0 flex-1 truncate text-[11.5px] text-muted">
-              {offline
-                ? t('health.offline')
-                : readyProviders.length
-                  ? readyProviders.map((p) => p.label).join(' · ')
-                  : t('providers.noCallable')}
-            </span>
-          </button>
-        )}
-        <div className={cn('flex items-center gap-1', collapsed && 'flex-col')}>
-          <IconButton label={t('nav.settings')} onClick={() => openSettings(true)} className={cn(collapsed && 'w-full')}>
-            <Settings size={15} />
-          </IconButton>
-          {authUser ? (
-            <IconButton
-              label={isAr ? 'حسابي والأمان' : 'Account & Security'}
-              onClick={() => openSettings(true, 'account')}
-              className={cn(collapsed && 'w-full')}
-            >
-              <ShieldCheck size={15} />
-            </IconButton>
-          ) : null}
-          <IconButton
-            label={t('settings.language')}
-            onClick={() => setLocale(locale === 'ar' ? 'en' : 'ar')}
-            className={cn(collapsed && 'w-full')}
-          >
-            <Globe size={15} />
-          </IconButton>
-          {authUser && collapsed ? (
-            <IconButton
-              label={isAr ? 'تسجيل الخروج' : 'Sign Out'}
-              onClick={() => void logout()}
-              className="w-full text-dim hover:text-danger"
-            >
-              <LogOut size={15} />
-            </IconButton>
-          ) : null}
-          {!collapsed && (
-            <span className="ms-auto rounded-md border border-line-strong bg-elevated px-1.5 py-0.5 font-mono text-[10px] text-dim">
-              {locale.toUpperCase()}
-            </span>
-          )}
         </div>
-      </div>
-    </aside>
+      </aside>
+    </>
   );
 }
 
@@ -236,7 +292,7 @@ function NavItem({ active, collapsed, icon, label, onClick }: { active: boolean;
 
 /* --------------------------------------------------------- conversations */
 
-function ConversationList({ collapsed }: { collapsed: boolean }) {
+function ConversationList({ collapsed, onSelect }: { collapsed: boolean; onSelect?: () => void }) {
   const { t, locale } = useI18n();
   const conversations = useChatStore((s) => s.conversations);
   const activeId = useChatStore((s) => s.activeId);
@@ -258,7 +314,14 @@ function ConversationList({ collapsed }: { collapsed: boolean }) {
   if (collapsed) {
     return (
       <div className="p-2">
-        <IconButton label={t('nav.newChat')} onClick={() => void newConversation()} className="w-full">
+        <IconButton
+          label={t('nav.newChat')}
+          onClick={() => {
+            void newConversation();
+            onSelect?.();
+          }}
+          className="w-full"
+        >
           <Plus size={16} />
         </IconButton>
       </div>
@@ -271,7 +334,13 @@ function ConversationList({ collapsed }: { collapsed: boolean }) {
     <div className="flex flex-col">
       <div className="flex items-center justify-between px-3 pb-1 pt-3">
         <span className="text-[10.5px] font-semibold uppercase tracking-wider text-dim">{t('nav.conversations')}</span>
-        <IconButton label={t('nav.newChat')} onClick={() => void newConversation()}>
+        <IconButton
+          label={t('nav.newChat')}
+          onClick={() => {
+            void newConversation();
+            onSelect?.();
+          }}
+        >
           <Plus size={14} />
         </IconButton>
       </div>
@@ -297,7 +366,10 @@ function ConversationList({ collapsed }: { collapsed: boolean }) {
                 <button
                   type="button"
                   className="min-w-0 flex-1 text-start"
-                  onClick={() => void openConversation(c.id)}
+                  onClick={() => {
+                    void openConversation(c.id);
+                    onSelect?.();
+                  }}
                 >
                   <span className={cn('block truncate text-[12.5px]', c.id === activeId ? 'text-text' : 'text-muted')}>
                     {c.title || t('nav.newChat')}
@@ -382,7 +454,7 @@ function ConversationList({ collapsed }: { collapsed: boolean }) {
 
 /* --------------------------------------------------------------- projects */
 
-function ProjectList({ collapsed }: { collapsed: boolean }) {
+function ProjectList({ collapsed, onSelect }: { collapsed: boolean; onSelect?: () => void }) {
   const { t } = useI18n();
   const projects = useCodeStore((s) => s.projects);
   const activeProjectId = useCodeStore((s) => s.activeProjectId);
@@ -405,7 +477,14 @@ function ProjectList({ collapsed }: { collapsed: boolean }) {
   if (collapsed) {
     return (
       <div className="p-2">
-        <IconButton label={t('code.newProject')} onClick={() => setCreating(true)} className="w-full">
+        <IconButton
+          label={t('code.newProject')}
+          onClick={() => {
+            setCreating(true);
+            onSelect?.();
+          }}
+          className="w-full"
+        >
           <Plus size={16} />
         </IconButton>
       </div>
@@ -418,7 +497,13 @@ function ProjectList({ collapsed }: { collapsed: boolean }) {
     <div className="flex flex-col">
       <div className="flex items-center justify-between px-3 pb-1 pt-3">
         <span className="text-[10.5px] font-semibold uppercase tracking-wider text-dim">{t('nav.projects')}</span>
-        <IconButton label={t('code.newProject')} onClick={() => setCreating(true)}>
+        <IconButton
+          label={t('code.newProject')}
+          onClick={() => {
+            setCreating(true);
+            onSelect?.();
+          }}
+        >
           <Plus size={14} />
         </IconButton>
       </div>
@@ -436,7 +521,14 @@ function ProjectList({ collapsed }: { collapsed: boolean }) {
                 )}
               >
                 <FolderKanban size={14} className={cn('shrink-0', p.id === activeProjectId ? 'text-accent' : 'text-dim')} />
-                <button type="button" className="min-w-0 flex-1 text-start" onClick={() => void selectProject(p.id)}>
+                <button
+                  type="button"
+                  className="min-w-0 flex-1 text-start"
+                  onClick={() => {
+                    void selectProject(p.id);
+                    onSelect?.();
+                  }}
+                >
                   <span className={cn('block truncate text-[12.5px]', p.id === activeProjectId ? 'text-text' : 'text-muted')}>
                     {p.name}
                   </span>

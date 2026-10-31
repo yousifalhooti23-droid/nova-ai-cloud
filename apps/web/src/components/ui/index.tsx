@@ -211,14 +211,14 @@ export function Modal({
 
   if (!open) return null;
   return createPortal(
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-[2px]" onClick={onClose} aria-hidden />
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-2.5 sm:p-4">
+      <div className="absolute inset-0 bg-black/70 backdrop-blur-[2px]" onClick={onClose} aria-hidden />
       <div
         ref={ref}
         role="dialog"
         aria-modal="true"
         aria-label={title}
-        className="animate-in relative flex max-h-[86vh] w-full flex-col overflow-hidden rounded-xl border border-line-strong bg-panel shadow-2xl"
+        className="animate-in relative flex max-h-[92vh] sm:max-h-[86vh] w-full flex-col overflow-hidden rounded-2xl sm:rounded-xl border border-line-strong bg-panel shadow-2xl"
         style={{ maxWidth: width }}
       >
         <header className="flex items-start justify-between gap-4 border-b border-line px-4 py-3">
@@ -311,7 +311,7 @@ export function Dropdown({ trigger, children, align = 'start', width = 260, clas
               'animate-in absolute z-40 mt-1.5 overflow-hidden rounded-lg border border-line-strong bg-elevated p-1 shadow-xl',
               align === 'end' ? 'end-0' : 'start-0',
             )}
-            style={{ width }}
+            style={{ width, maxWidth: 'calc(100vw - 1.5rem)' }}
           >
             {children}
           </div>

@@ -168,6 +168,80 @@ export function isDisposableOrFakeDomain(domain: string): boolean {
   return false;
 }
 
+/**
+ * Detect keyboard mash, repetitive patterns, and random consonant strings
+ * like `gsgdgsgdgsgs`, `asdfghjkl`, `qwerty123`, `zxcvbn`, `asdasd`.
+ * This protects Brevo's daily sending quota from being drained by bot/spam fake inputs.
+ */
+export function isGibberishOrFakeLocalPart(localPart: string): boolean {
+  const clean = localPart.toLowerCase().trim();
+  if (clean.length < 3) return true;
+
+  // 1. Obvious dummy/test words
+  if (/^(test|fake|dummy|sample|spam|temp|anon|admin|root|user|asdf|qwerty|zxcvbn|123456|000000)$/i.test(clean)) {
+    return true;
+  }
+
+  // 2. Pure repetitive single character (e.g. `aaaa`, `1111`, `xxxx`)
+  if (/^(.)\1{3,}$/i.test(clean) || /(.)\1{4,}/i.test(clean)) {
+    return true;
+  }
+
+  // 3. Repeating pattern chunks (e.g. `gsgsgs`, `asdasdasd`, `ababab`, `qweqweqwe`)
+  if (/^([a-z0-9]{2,4})\1{2,}$/i.test(clean)) {
+    return true;
+  }
+
+  // 4. Common keyboard mash walks (QWERTY horizontal & diagonal rows >= 5 chars)
+  const KEYBOARD_WALKS = [
+    'qwerty', 'wertyu', 'ertyui', 'rtyuio', 'tyuiop',
+    'asdfgh', 'sdfghj', 'dfghjk', 'fghjkl',
+    'zxcvbn', 'xcvbnm',
+    'poiuyt', 'lkjhgf', 'mnbvcx',
+    '123456', '234567', '345678', '456789', '567890',
+    'qazwsx', 'wsxedc', 'edcrfv', 'rfvtgb', 'tgbzhn',
+  ];
+  for (const walk of KEYBOARD_WALKS) {
+    if (clean.includes(walk)) return true;
+  }
+
+  // 5. Consonant and vowel analysis on alphabetic letters
+  const lettersOnly = clean.replace(/[^a-z]/g, '');
+  if (lettersOnly.length >= 6) {
+    // If letters length >= 6 and ZERO vowels -> 100% gibberish (e.g. `gsgdgsgdgsgs`, `bcdfghjkl`)
+    if (!/[aeiouy]/i.test(lettersOnly)) {
+      return true;
+    }
+
+    // Unnatural consonant clusters: 5 or more consecutive consonants (e.g. `gsgdg`, `bcdfgh`)
+    if (/[bcdfghjklmnpqrstvwxz]{5,}/i.test(lettersOnly)) {
+      return true;
+    }
+
+    // High vowel starvation on long strings: e.g. length >= 10 with only 1 vowel
+    const vowels = lettersOnly.match(/[aeiouy]/gi);
+    const vowelCount = vowels ? vowels.length : 0;
+    if (lettersOnly.length >= 10 && vowelCount <= 1) {
+      return true;
+    }
+  }
+
+  // 6. Subword analysis: words separated by dots, numbers, hyphens or underscores
+  const words = clean.split(/[^a-z]+/i).filter((w) => w.length >= 4);
+  for (const w of words) {
+    // A 4+ letter word with zero vowels is not a valid human name or word
+    if (!/[aeiouy]/i.test(w)) {
+      return true;
+    }
+    // 5+ consecutive consonants in any subword
+    if (/[bcdfghjklmnpqrstvwxz]{5,}/i.test(w)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 export interface EmailValidationOptions {
   strictTrustedDomainsOnly?: boolean;
   skipDnsMxCheck?: boolean;
@@ -176,9 +250,10 @@ export interface EmailValidationOptions {
 /**
  * Full anti-fake & anti-disposable email validation:
  *  1. Strict syntax & `+alias` rejection (blocks `user+1@gmail.com` directly)
- *  2. Disposable / temp-mail / reserved domain blocklist (250+ domains + Arabic temp-mails)
- *  3. Optional strict trusted-providers-only mode (Gmail / Outlook / Hotmail / iCloud / Yahoo / Proton)
- *  4. Live DNS `MX` record lookup via Cloudflare DoH (`1.1.1.1`) + MX host temp-mail inspection!
+ *  2. Anti-gibberish / anti-keyboard-mash protection to defend mailer quota ($0 Brevo shield)
+ *  3. Disposable / temp-mail / reserved domain blocklist (250+ domains + Arabic temp-mails)
+ *  4. Optional strict trusted-providers-only mode (Gmail / Outlook / Hotmail / iCloud / Yahoo / Proton)
+ *  5. Live DNS `MX` record lookup via Cloudflare DoH (`1.1.1.1`) + MX host temp-mail inspection!
  */
 export async function validateRealEmail(
   rawEmail: string,
@@ -196,11 +271,12 @@ export async function validateRealEmail(
     throw badRequest('لا يُسمح باستخدام علامة (+) أو العناوين الفرعية في التسجيل.', 'alias_not_allowed');
   }
 
-  if (localPart.length < 2 || /^(test|fake|admin|root|user|asdf|qwerty|123456|000000)$/i.test(localPart)) {
-    // Block obvious dummy local parts unless on a trusted major provider (where OTP still proves ownership)
-    if (!TRUSTED_MAJOR_PROVIDERS.has(domain)) {
-      throw badRequest('هذا البريد يبدو وهمياً. يرجى التسجيل ببريدك الحقيقي لتلقّي رمز التحقق (OTP).', 'fake_email');
-    }
+  // Block random keyboard mash / gibberish emails (e.g. `gsgdgsgdgsgs@gmail.com`, `asdfghjkl@...`)
+  if (isGibberishOrFakeLocalPart(localPart)) {
+    throw badRequest(
+      '⛔ البريد الإلكتروني المدخل يبدو عشوائياً أو غير حقيقي. يرجى كتابة بريدك الفعلي لتلقي رمز التحقق (OTP).',
+      'fake_email',
+    );
   }
 
   if (isDisposableOrFakeDomain(domain)) {

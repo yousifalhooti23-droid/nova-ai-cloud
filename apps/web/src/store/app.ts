@@ -62,6 +62,7 @@ interface AppState extends Prefs {
   toasts: Toast[];
   settingsOpen: boolean;
   settingsTab: SettingsTabId;
+  mobileSidebarOpen: boolean;
   offline: boolean;
   loadSandbox: () => Promise<void>;
   loadSettings: () => Promise<void>;
@@ -82,6 +83,7 @@ interface AppState extends Prefs {
   setLocale: (locale: Locale) => Promise<void>;
   setView: (view: View) => void;
   toggleSidebar: () => void;
+  setMobileSidebarOpen: (open: boolean) => void;
   openSettings: (open?: boolean, tab?: SettingsTabId) => void;
   toast: (t: Omit<Toast, 'id'>) => void;
   dismissToast: (id: string) => void;
@@ -102,6 +104,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   toasts: [],
   settingsOpen: false,
   settingsTab: 'general',
+  mobileSidebarOpen: false,
   offline: false,
   lastError: null,
 
@@ -269,10 +272,19 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   setView(view) {
     get().patchPrefs({ view });
+    set({ mobileSidebarOpen: false });
   },
 
   toggleSidebar() {
-    get().patchPrefs({ sidebarCollapsed: !get().sidebarCollapsed });
+    if (typeof window !== 'undefined' && window.innerWidth < 768) {
+      set((s) => ({ mobileSidebarOpen: !s.mobileSidebarOpen }));
+    } else {
+      get().patchPrefs({ sidebarCollapsed: !get().sidebarCollapsed });
+    }
+  },
+
+  setMobileSidebarOpen(open) {
+    set({ mobileSidebarOpen: open });
   },
 
   openSettings(open = true, tab) {

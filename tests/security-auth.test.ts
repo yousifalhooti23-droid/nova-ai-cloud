@@ -143,6 +143,19 @@ describe('Fortress multi-user auth, anti-fake email + mandatory OTP, zero-leak i
       expect(['disposable_email_blocked', 'fake_email']).toContain(err.code);
     }
 
+    // 1b. Random gibberish & keyboard-mash on major domains (e.g. gsgdgsgdgsgs@gmail.com) MUST be blocked to protect Brevo quota!
+    for (const gibberishEmail of ['gsgdgsgdgsgs@gmail.com', 'asdfghjkl@gmail.com', 'qwertyuiop@gmail.com', 'qweqweqwe@gmail.com']) {
+      const r = await apiReq(
+        'POST',
+        Endpoints.authRegister,
+        { displayName: 'Gibberish', email: gibberishEmail, password: 'StrongPassword123' },
+        { 'cf-connecting-ip': '10.9.9.15' },
+      );
+      expect(r.status).toBe(400);
+      const err = (await r.json()) as { code: string };
+      expect(err.code).toBe('fake_email');
+    }
+
     // 2. +alias subaddressing MUST be blocked to prevent multi-account quota bypass
     const aliasRes = await apiReq(
       'POST',

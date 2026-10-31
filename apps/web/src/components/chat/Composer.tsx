@@ -79,10 +79,10 @@ export function Composer({ projectId, onNeedProject }: { projectId?: string | nu
   const tokens = estimateTokens(value);
 
   return (
-    <div className="px-4 pb-4">
+    <div className="px-2.5 pb-2.5 sm:px-4 sm:pb-4">
       <div className="mx-auto w-full max-w-3xl">
         {/* Studio Mode Bar */}
-        <div className="mb-2 flex flex-wrap items-center gap-1.5">
+        <div className="mb-2 flex items-center gap-1.5 overflow-x-auto no-scrollbar -mx-1 px-1 sm:flex-wrap">
           {modes.map((m) => {
             const active = composer.studioMode === m.id;
             return (
@@ -94,7 +94,7 @@ export function Composer({ projectId, onNeedProject }: { projectId?: string | nu
                   taRef.current?.focus();
                 }}
                 className={cn(
-                  'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11.5px] transition-colors',
+                  'inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] sm:text-[11.5px] transition-colors whitespace-nowrap',
                   active
                     ? 'border-accent/60 bg-accent/15 font-medium text-accent'
                     : 'border-line bg-panel text-muted hover:border-line-strong hover:text-text',
@@ -187,7 +187,7 @@ export function Composer({ projectId, onNeedProject }: { projectId?: string | nu
               }
             }}
             placeholder={dragging ? t('studio.dropHint') : placeholder}
-            className="max-h-[220px] w-full resize-none bg-transparent px-3.5 pt-3 text-[13.5px] leading-relaxed text-text outline-none placeholder:text-dim disabled:opacity-60"
+            className="max-h-[200px] w-full resize-none bg-transparent px-3 pt-2.5 sm:px-3.5 sm:pt-3 text-[15px] sm:text-[13.5px] leading-relaxed text-text outline-none placeholder:text-dim disabled:opacity-60"
           />
 
           <div className="flex flex-wrap items-center gap-2 px-2.5 py-2">

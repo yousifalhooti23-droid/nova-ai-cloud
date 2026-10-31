@@ -43,6 +43,6 @@
     "NOVA_OWNER_EMAIL": "yousifalhooti23@gmail.com",
     "NOVA_OWNER_NAME": "Yousif",
     "NOVA_USER_QUOTA_LIMIT": "20",
-    "NOVA_VERSION": "0.4.0"
+    "NOVA_VERSION": "0.4.1"
   }
 }

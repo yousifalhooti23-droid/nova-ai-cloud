@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowLeftRight, Bot, FileCode2, FilePlus2, FileSearch, FolderKanban, GitBranch,
-  ListChecks, PanelRight, Save, Search, Terminal as TerminalIcon, Trash2, Upload, X,
+  ListChecks, Menu, PanelRight, Save, Search, Terminal as TerminalIcon, Trash2, Upload, X,
 } from 'lucide-react';
 import { detectLanguage, isBinaryPath } from '@nova/shared';
 import { useI18n } from '@/i18n';
@@ -54,6 +54,7 @@ export function CodePage() {
   const editorFontSize = useAppStore((s) => s.editorFontSize);
   const editorWrap = useAppStore((s) => s.editorWrap);
   const patchPrefs = useAppStore((s) => s.patchPrefs);
+  const setMobileSidebarOpen = useAppStore((s) => s.setMobileSidebarOpen);
 
   const wide = useMediaQuery('(min-width: 1280px)');
   const medium = useMediaQuery('(min-width: 900px)');
@@ -188,6 +189,15 @@ export function CodePage() {
     <div className="flex h-full min-h-0 flex-col">
       {/* ------------------------------------------------------- project bar */}
       <header className="flex h-[52px] shrink-0 items-center gap-2 border-b border-line bg-surface/70 px-3 backdrop-blur">
+        <button
+          type="button"
+          onClick={() => setMobileSidebarOpen(true)}
+          className="inline-flex items-center justify-center rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-text md:hidden"
+          title={t('nav.conversations')}
+        >
+          <Menu size={18} />
+        </button>
+
         <Dropdown
           width={260}
           trigger={({ toggle, open }) => (

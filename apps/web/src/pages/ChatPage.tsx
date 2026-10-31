@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import type { ChatMessage } from '@nova/shared';
 import {
   AlertTriangle, ArrowDown, Brain, Film, FolderKanban, Globe, Image as ImageIcon,
-  Lightbulb, Link2, MessageSquare, Pencil, Sparkles, Trash2, Unlink, X,
+  Lightbulb, Link2, Menu, MessageSquare, Pencil, Plus, Sparkles, Trash2, Unlink, X,
 } from 'lucide-react';
 import { useI18n } from '@/i18n';
 import { cn } from '@/lib/cn';
@@ -32,6 +32,7 @@ export function ChatPage() {
   const patchConversation = useChatStore((s) => s.patchConversation);
   const renameConversation = useChatStore((s) => s.renameConversation);
   const loadConversations = useChatStore((s) => s.loadConversations);
+  const newConversation = useChatStore((s) => s.newConversation);
 
   const projects = useCodeStore((s) => s.projects);
   const loadProjects = useCodeStore((s) => s.loadProjects);
@@ -39,6 +40,7 @@ export function ChatPage() {
   const selectProject = useCodeStore((s) => s.selectProject);
   const health = useAppStore((s) => s.health);
   const openSettings = useAppStore((s) => s.openSettings);
+  const setMobileSidebarOpen = useAppStore((s) => s.setMobileSidebarOpen);
 
   const [memoryOpen, setMemoryOpen] = useState(false);
   const [renaming, setRenaming] = useState(false);
@@ -78,7 +80,17 @@ export function ChatPage() {
   return (
     <div className="flex h-full min-h-0 flex-col">
       {/* ---------------------------------------------------------- header */}
-      <header className="flex h-[52px] shrink-0 items-center gap-2 border-b border-line bg-surface/70 px-4 backdrop-blur">
+      <header className="flex h-[52px] shrink-0 items-center gap-2 border-b border-line bg-surface/70 px-3 sm:px-4 backdrop-blur">
+        {/* Mobile menu toggle */}
+        <button
+          type="button"
+          onClick={() => setMobileSidebarOpen(true)}
+          className="inline-flex items-center justify-center rounded-lg p-1.5 text-muted hover:bg-elevated hover:text-text md:hidden"
+          title={t('nav.conversations')}
+        >
+          <Menu size={18} />
+        </button>
+
         <div className="flex min-w-0 flex-1 items-center gap-2">
           {renaming ? (
             <TextInput
@@ -97,7 +109,7 @@ export function ChatPage() {
             />
           ) : (
             <>
-              <h1 className="max-w-[46ch] truncate text-[13.5px] font-medium">
+              <h1 className="max-w-[18ch] sm:max-w-[46ch] truncate text-[13px] sm:text-[13.5px] font-medium">
                 {conversation?.title || t('nav.newChat')}
               </h1>
               {activeId && !activeId.startsWith('conv_local') ? (
@@ -118,6 +130,15 @@ export function ChatPage() {
             <span className="hidden text-[11px] text-dim md:inline">{relativeTime(conversation.updatedAt, locale)}</span>
           ) : null}
         </div>
+
+        {/* Mobile New Chat Button */}
+        <IconButton
+          label={t('nav.newChat')}
+          onClick={() => void newConversation()}
+          className="md:hidden"
+        >
+          <Plus size={16} />
+        </IconButton>
 
         {/* project link */}
         <Dropdown

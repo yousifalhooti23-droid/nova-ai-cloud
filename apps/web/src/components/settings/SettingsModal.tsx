@@ -45,8 +45,8 @@ export function SettingsModal() {
       width={780}
       footer={<Button variant="ghost" onClick={() => openSettings(false)}>{t('common.close')}</Button>}
     >
-      <div className="flex gap-4">
-        <nav className="flex w-[160px] shrink-0 flex-col gap-0.5">
+      <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
+        <nav className="flex sm:flex-col shrink-0 gap-1 overflow-x-auto pb-2 sm:pb-0 sm:w-[160px] scroll-thin border-b sm:border-b-0 sm:border-e border-line -mx-1 px-1">
           <TabButton active={activeTab === 'general'} onClick={() => openSettings(true, 'general')} icon={<Globe size={13} />} label={t('settings.general')} />
           {authUser ? (
             <TabButton
@@ -80,12 +80,12 @@ function TabButton({ active, onClick, icon, label }: { active: boolean; onClick:
       type="button"
       onClick={onClick}
       className={cn(
-        'flex items-center gap-2 rounded-lg px-2.5 py-2 text-start text-[12.5px] transition-colors',
-        active ? 'bg-accent/12 text-accent' : 'text-muted hover:bg-elevated hover:text-text',
+        'flex shrink-0 items-center gap-2 rounded-lg px-2.5 py-1.5 sm:py-2 text-start text-[12px] sm:text-[12.5px] transition-colors whitespace-nowrap',
+        active ? 'bg-accent/15 font-semibold text-accent' : 'text-muted hover:bg-elevated hover:text-text',
       )}
     >
       {icon}
-      {label}
+      <span>{label}</span>
     </button>
   );
 }
