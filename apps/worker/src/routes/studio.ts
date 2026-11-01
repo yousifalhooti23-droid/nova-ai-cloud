@@ -341,27 +341,39 @@ export async function generateCloudImage(
     }
   }
 
-  // 3. 100% Free Cloud GPU Fallback: Pollinations Flux (unlimited, no quota/neuron limits)
+  // 3. 100% Free Cloud GPU Fallback: Pollinations Flux & Turbo (unlimited, no quota/neuron limits)
   if (!imageBytes || imageBytes.byteLength < 256) {
-    try {
-      const cleanPrompt = encodeURIComponent(truncate(promptUsed, 600));
-      const seed = Math.floor(Math.random() * 1000000);
-      const polUrl = `https://image.pollinations.ai/prompt/${cleanPrompt}?width=${width}&height=${height}&model=flux&seed=${seed}&nologo=true`;
-      const polResp = await fetch(polUrl, { signal: opts.signal ?? AbortSignal.timeout(20000) });
-      if (polResp.ok) {
-        const polBuf = new Uint8Array(await polResp.arrayBuffer());
-        if (polBuf.byteLength > 256) {
-          imageBytes = polBuf;
-          mime = polResp.headers.get('content-type') || 'image/jpeg';
-          provider = 'pollinations-flux';
-          d.log.info('generated image via free cloud GPU fallback', { provider, bytes: polBuf.byteLength });
+    const sanitizedPrompt = promptUsed
+      .replace(/(?:WhatsApp Image|image|photo|att_)[^\n]*\.(?:jpeg|jpg|png|webp)/gi, '')
+      .replace(/[\r\n\t]+/g, ' ')
+      .replace(/[^a-zA-Z0-9\s\u0600-\u06FF,-]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .slice(0, 240);
+
+    const seed = Math.floor(Math.random() * 1000000);
+    const modelsToTry = ['flux', 'turbo'];
+
+    for (const m of modelsToTry) {
+      try {
+        const polUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(sanitizedPrompt)}?width=${width}&height=${height}&model=${m}&seed=${seed}&nologo=true`;
+        const polResp = await fetch(polUrl, { signal: opts.signal ?? AbortSignal.timeout(20000) });
+        if (polResp.ok) {
+          const polBuf = new Uint8Array(await polResp.arrayBuffer());
+          if (polBuf.byteLength > 256) {
+            imageBytes = polBuf;
+            mime = polResp.headers.get('content-type') || 'image/jpeg';
+            provider = `pollinations-${m}`;
+            d.log.info('generated image via free cloud GPU fallback', { provider, bytes: polBuf.byteLength });
+            break;
+          }
+        } else {
+          lastErr = `Free cloud GPU HTTP ${polResp.status}`;
         }
-      } else {
-        lastErr = `Free cloud GPU HTTP ${polResp.status}`;
+      } catch (err) {
+        lastErr = err instanceof Error ? err.message : String(err);
+        d.log.warn('free cloud GPU fallback failed, trying next', { model: m, error: lastErr });
       }
-    } catch (err) {
-      lastErr = err instanceof Error ? err.message : String(err);
-      d.log.warn('free cloud GPU fallback failed', { error: lastErr });
     }
   }
 
