@@ -29,8 +29,8 @@ export function registerStudioRoutes(app: Hono<AppEnv>) {
     }
     const res = await generateCloudImage(d, {
       prompt: req.prompt.trim(),
-      width: clampDim(req.width ?? 1024),
-      height: clampDim(req.height ?? 1024),
+      width: req.width !== undefined ? clampDim(req.width) : undefined,
+      height: req.height !== undefined ? clampDim(req.height) : undefined,
       conversationId: req.conversationId ?? null,
       projectId: req.projectId ?? null,
       signal: c.req.raw.signal,
@@ -103,19 +103,84 @@ const VIDEO_PREFIX_RE =
   /^(انشئ\s+(?:فيديو|فديو|قديو)|أنشئ\s+(?:فيديو|فديو|قديو)|انشاء\s+(?:فيديو|فديو|قديو)|إنشاء\s+(?:فيديو|فديو|قديو)|صمم\s+(?:فيديو|فديو|قديو)|اصنع\s+(?:فيديو|فديو|قديو)|ولد\s+(?:فيديو|فديو|قديو)|ولّد\s+(?:فيديو|فديو|قديو)|سوي(?:\s+لي)?\s+(?:فيديو|فديو|قديو)|ابغى\s+(?:فيديو|فديو|قديو)|أريد\s+(?:فيديو|فديو|قديو)|اريد\s+(?:فيديو|فديو|قديو)|اعمل(?:\s+لي)?\s+(?:فيديو|فديو|قديو)|(?:فيديو|فديو|قديو)(?:\s+عن|\s+حول|\s+لـ)?|create a video(?:\s+about|\s+of)?|generate a video(?:\s+about|\s+of)?|make a video(?:\s+about|\s+of)?)\s*/i;
 
 /**
- * Translates and expands Arabic or English prompts into crisp, domain-specific visual descriptions.
- * Uses a robust fast LLM call with a rich semantic dictionary fallback so it NEVER defaults to an unrelated subject.
+ * Automatically detects aspect ratio from keywords in the prompt:
+ * - "vertical" / "poster" / "portrait" -> 768 x 1024
+ * - "horizontal" / "landscape" / "widescreen" -> 1024 x 768
+ * - default -> 1024 x 1024
+ */
+export function detectImageDimensions(
+  prompt: string,
+  requestedWidth?: number,
+  requestedHeight?: number,
+): { width: number; height: number; aspect: 'square' | 'vertical' | 'horizontal' } {
+  // Respect explicit non-default dimensions passed from client options
+  if (
+    requestedWidth &&
+    requestedHeight &&
+    (requestedWidth !== 1024 || requestedHeight !== 1024)
+  ) {
+    const w = clampDim(requestedWidth);
+    const h = clampDim(requestedHeight);
+    return {
+      width: w,
+      height: h,
+      aspect: h > w ? 'vertical' : w > h ? 'horizontal' : 'square',
+    };
+  }
+
+  const p = prompt.toLowerCase();
+
+  // Vertical / Poster aspect keywords: 768 x 1024
+  if (
+    /(?:vertical|poster|portrait|phone|wallpaper|story|stories|tall|mobile|عمودي|طولي|بوستر|ستوري|خلفية\s+جوال|غلاف|ريلز|تيك\s*توك)/i.test(p)
+  ) {
+    return { width: 768, height: 1024, aspect: 'vertical' };
+  }
+
+  // Horizontal / Landscape aspect keywords: 1024 x 768
+  if (
+    /(?:horizontal|landscape|widescreen|wide|banner|desktop|youtube|16:9|4:3|أفقي|عرضي|عريض|بانر|شاشة\s+عريضة|ديسك\s*توب|يوتيوب)/i.test(p)
+  ) {
+    return { width: 1024, height: 768, aspect: 'horizontal' };
+  }
+
+  // Default square: 1024 x 1024
+  return { width: 1024, height: 1024, aspect: 'square' };
+}
+
+/**
+ * Clean and normalize image prompts:
+ * - Strips command prefixes ("صمم لي صورة", "generate an image", etc.)
+ * - Strips attached filename noise ("WhatsApp Image...", "att_123...")
+ * - Replaces newlines (\r\n, \r, \n), tabs, and multiple spaces with single spaces
+ * - NEVER truncates multi-line descriptions of typography, composition, or lighting.
+ */
+export function cleanAndSanitizeImagePrompt(raw: string): string {
+  let p = raw.trim();
+  p = p.replace(IMAGE_PREFIX_RE, '').trim();
+  p = p.replace(/(?:WhatsApp Image|image|photo|att_)[^\n\r]*\.(?:jpeg|jpg|png|webp|gif)/gi, ' ');
+  p = p.replace(/\[(?:Attached\s+video\s+file|attached\s+file)[^\]]*\]/gi, ' ');
+  // Replace newlines, line breaks, and tabs with spaces to preserve full descriptions
+  p = p.replace(/[\r\n\t]+/g, ' ');
+  p = p.replace(/\s{2,}/g, ' ').trim();
+  return p.length >= 2 ? p : 'cinematic artistic masterpiece, dramatic studio lighting, 8k render';
+}
+
+/**
+ * Translates and expands Arabic prompts into crisp, domain-specific visual descriptions.
+ * Preserves all fine details (typography, specular highlights, object placement).
  */
 async function translateVisualSubject(d: AppDeps, cleanText: string): Promise<string> {
   const text = cleanText.trim();
   if (!text) return 'cinematic visual showcase with professional lighting';
 
-  // If purely English, return as is
-  if (!hasArabic(text) && text.length > 5) {
+  // If purely English or substantial English text, keep as-is with zero compression
+  const englishCount = (text.match(/[a-zA-Z]/g) || []).length;
+  if (!hasArabic(text) || englishCount > 25) {
     return text;
   }
 
-  // 1. Try fast LLM translation first (12s timeout)
+  // 1. Try fast LLM translation preserving ALL details, typography, and composition
   const hasReadyLlm = d.router.providerInfos().some((p) => p.status === 'ready' && p.id !== 'diagnostic');
   if (hasReadyLlm) {
     try {
@@ -127,14 +192,14 @@ async function translateVisualSubject(d: AppDeps, cleanText: string): Promise<st
           {
             modelId: resolved.model.id,
             stream: false,
-            maxTokens: 75,
+            maxTokens: 400,
             temperature: 0.3,
             signal: ac.signal,
             messages: [
               {
                 role: 'system',
                 content:
-                  'Translate the user topic into ONE concise, vivid visual description in English (15-25 words). STRICTLY preserve the exact subject (e.g. cars, perfumes, coffee, store, sports, landscape). Output ONLY the English translation with no quotes or explanation.',
+                  'Translate this Arabic visual description into a detailed, high-fidelity English visual prompt for FLUX image generation. Preserve all typography, objects, lighting, colors, layout, and composition. Output ONLY the English translation without quotes, notes, or commentary.',
               },
               { role: 'user', content: text },
             ],
@@ -176,7 +241,7 @@ async function translateVisualSubject(d: AppDeps, cleanText: string): Promise<st
   if (/طبيعة|جبل|جبال|وادي|بحر|شاطئ|رمال|صحراء/i.test(low)) {
     descriptors.push('majestic natural landscape, rugged mountain peaks, golden sand dunes, dramatic sky with atmospheric volumetric lighting');
   }
-  if (/طعام|مطعم|أكل|طبخ|شيف|وجب[ةه]/i.test(low)) {
+  if (/طعام|مطعم|أكل|طبخ|شيف|وجب[ةه]|برجر/i.test(low)) {
     descriptors.push('gourmet culinary masterpiece, appetizing fresh food plating, artisan kitchen, warm fine dining atmosphere');
   }
   if (/تقني[ةه]|تكنولوجيا|روبوت|ذكاء\s*اصطناعي|مستقبل|برمج/i.test(low)) {
@@ -190,22 +255,25 @@ async function translateVisualSubject(d: AppDeps, cleanText: string): Promise<st
   }
 
   if (descriptors.length > 0) {
-    return descriptors.join(', ');
+    return `${descriptors.join(', ')}, ${text.replace(/[^\w\s\u0600-\u06FF]/g, ' ').trim()}`;
   }
 
-  // Fallback: clean transcription keywords
-  return `${text.replace(/[^\w\s\u0600-\u06FF]/g, ' ').slice(0, 80)}, vivid cinematic aesthetic, dramatic lighting, ultra detailed 8k`;
+  return `${text.replace(/[^\w\s\u0600-\u06FF]/g, ' ').trim()}, vivid cinematic aesthetic, dramatic lighting, ultra detailed 8k`;
 }
 
 /**
- * Optionally translates/expands a user prompt into a crisp English visual prompt
- * when a free text LLM is configured; falls back gracefully with zero errors.
+ * Prepares the visual prompt:
+ * Replaces newlines with spaces, cleans noise, and preserves full descriptions without truncating.
  */
 async function refineVisualPrompt(d: AppDeps, rawPrompt: string, skipEnhance = false): Promise<string> {
-  const stripped = rawPrompt.replace(IMAGE_PREFIX_RE, '').trim();
-  const clean = stripped.length >= 2 ? stripped : 'منظر سينمائي خيالي فائق الجمال والدقة';
-
+  const clean = cleanAndSanitizeImagePrompt(rawPrompt);
   if (skipEnhance) return clean;
+
+  const englishCount = (clean.match(/[a-zA-Z]/g) || []).length;
+  if (!hasArabic(clean) || englishCount > 25) {
+    return clean;
+  }
+
   return translateVisualSubject(d, clean);
 }
 
@@ -246,8 +314,9 @@ export async function generateCloudImage(
     signal?: AbortSignal;
   },
 ): Promise<StudioImageResponse> {
-  const width = opts.width ?? 1024;
-  const height = opts.height ?? 1024;
+  const dim = detectImageDimensions(opts.prompt, opts.width, opts.height);
+  const width = dim.width;
+  const height = dim.height;
   const promptUsed = await refineVisualPrompt(d, opts.prompt, opts.skipEnhance);
 
   let imageBytes: Uint8Array | null = null;
@@ -255,45 +324,26 @@ export async function generateCloudImage(
   let provider = 'workers-ai-flux';
   let lastErr = '';
 
-  // 1. Primary 100% Free Cloud GPU Cascade: Cloudflare Workers AI (Flux-1-Schnell + SDXL-Lightning + SDXL-Base)
+  // 1. Primary Image Generator: Cloudflare Workers AI (FLUX -> SDXL-Lightning)
   if (d.env.AI) {
     const ai = d.env.AI as { run(model: string, params: Record<string, unknown>): Promise<unknown> };
-    const trimmedPrompt = truncate(promptUsed, 900);
-    const candidates: { id: string; model: string; params: Record<string, unknown> }[] = opts.fast
-      ? [
-          {
-            id: 'workers-ai-sdxl-lightning',
-            model: '@cf/bytedance/stable-diffusion-xl-lightning',
-            params: { prompt: trimmedPrompt, width, height, num_steps: 4 },
-          },
-          {
-            id: 'workers-ai-flux',
-            model: '@cf/black-forest-labs/flux-1-schnell',
-            params: { prompt: trimmedPrompt, steps: 4 },
-          },
-          {
-            id: 'workers-ai-sdxl',
-            model: '@cf/stabilityai/stable-diffusion-xl-base-1.0',
-            params: { prompt: trimmedPrompt, width, height, num_steps: 12 },
-          },
-        ]
-      : [
-          {
-            id: 'workers-ai-flux',
-            model: '@cf/black-forest-labs/flux-1-schnell',
-            params: { prompt: trimmedPrompt, steps: 4 },
-          },
-          {
-            id: 'workers-ai-sdxl-lightning',
-            model: '@cf/bytedance/stable-diffusion-xl-lightning',
-            params: { prompt: trimmedPrompt, width, height, num_steps: 4 },
-          },
-          {
-            id: 'workers-ai-sdxl',
-            model: '@cf/stabilityai/stable-diffusion-xl-base-1.0',
-            params: { prompt: trimmedPrompt, width, height, num_steps: 12 },
-          },
-        ];
+    const candidates: { id: string; model: string; params: Record<string, unknown> }[] = [
+      {
+        id: 'workers-ai-flux',
+        model: '@cf/black-forest-labs/flux-1-schnell',
+        params: { prompt: promptUsed, steps: 4 },
+      },
+      {
+        id: 'workers-ai-sdxl-lightning',
+        model: '@cf/bytedance/stable-diffusion-xl-lightning',
+        params: { prompt: promptUsed, width, height, num_steps: 4 },
+      },
+      {
+        id: 'workers-ai-sdxl',
+        model: '@cf/stabilityai/stable-diffusion-xl-base-1.0',
+        params: { prompt: promptUsed, width, height, num_steps: 12 },
+      },
+    ];
 
     for (const candidate of candidates) {
       try {
@@ -302,11 +352,12 @@ export async function generateCloudImage(
           imageBytes = res.bytes;
           mime = res.mime;
           provider = candidate.id;
+          d.log.info('generated image via Cloudflare Workers AI', { model: candidate.model, bytes: imageBytes.byteLength, width, height });
           break;
         }
       } catch (err) {
         lastErr = err instanceof Error ? err.message : String(err);
-        d.log.warn('Workers AI image engine failed, trying next free engine', { model: candidate.model, error: lastErr });
+        d.log.warn('Workers AI image engine failed, trying next candidate', { model: candidate.model, error: lastErr });
       }
     }
   }
@@ -341,47 +392,36 @@ export async function generateCloudImage(
     }
   }
 
-  // 3. 100% Free Cloud GPU Fallback: Pollinations Cascade (unlimited, no quota/neuron limits)
+  // 3. Upgraded Fallback Image Generator: Pollinations FLUX Pro Configuration
+  // NEVER use bare default URL. Always specify model=flux, width, height, nologo=true, enhance=false, and random seed.
   if (!imageBytes || imageBytes.byteLength < 256) {
-    let sanitizedPrompt = promptUsed
-      .replace(/(?:WhatsApp Image|image|photo|att_)[^\n]*\.(?:jpeg|jpg|png|webp)/gi, '')
-      .replace(/[\r\n\t]+/g, ' ')
-      .replace(/[^a-zA-Z0-9\s\u0600-\u06FF,-]/g, ' ')
-      .replace(/\s+/g, ' ')
-      .trim()
-      .slice(0, 220);
+    const randomSeed = Math.floor(Math.random() * 2147483647);
+    const fluxProUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(promptUsed)}?model=flux&width=${width}&height=${height}&nologo=true&enhance=false&seed=${randomSeed}`;
+    const turboFallbackUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(promptUsed)}?model=turbo&width=${width}&height=${height}&nologo=true&enhance=false&seed=${randomSeed}`;
 
-    if (sanitizedPrompt.length < 3) {
-      sanitizedPrompt = 'aesthetic cinematic 3d render, dramatic studio lighting, ultra detailed 8k masterwork';
-    }
-
-    const seed = Math.floor(Math.random() * 1000000);
     const endpointsToTry = [
-      `https://image.pollinations.ai/prompt/${encodeURIComponent(sanitizedPrompt)}?width=${width}&height=${height}&model=flux&seed=${seed}&nologo=true`,
-      `https://image.pollinations.ai/prompt/${encodeURIComponent(sanitizedPrompt)}?width=${width}&height=${height}&seed=${seed}&nologo=true`,
-      `https://image.pollinations.ai/prompt/${encodeURIComponent(sanitizedPrompt)}?width=${width}&height=${height}&model=turbo&seed=${seed}&nologo=true`,
-      `https://pollinations.ai/p/${encodeURIComponent(sanitizedPrompt)}?width=${width}&height=${height}&seed=${seed}&nologo=true`,
+      { url: fluxProUrl, provider: 'pollinations-flux-pro' },
+      { url: turboFallbackUrl, provider: 'pollinations-turbo' },
     ];
 
-    for (let i = 0; i < endpointsToTry.length; i++) {
-      const polUrl = endpointsToTry[i];
+    for (const ep of endpointsToTry) {
       try {
-        const polResp = await fetch(polUrl, { signal: opts.signal ?? AbortSignal.timeout(22000) });
+        const polResp = await fetch(ep.url, { signal: opts.signal ?? AbortSignal.timeout(28000) });
         if (polResp.ok) {
           const polBuf = new Uint8Array(await polResp.arrayBuffer());
           if (polBuf.byteLength > 256) {
             imageBytes = polBuf;
             mime = polResp.headers.get('content-type') || 'image/jpeg';
-            provider = `pollinations-cloud-${i === 0 ? 'flux' : i === 1 ? 'default' : i === 2 ? 'turbo' : 'p'}`;
-            d.log.info('generated image via free cloud GPU fallback', { provider, bytes: polBuf.byteLength });
+            provider = ep.provider;
+            d.log.info('generated image via Pollinations FLUX Pro fallback', { provider, bytes: polBuf.byteLength, width, height });
             break;
           }
         } else {
-          lastErr = `Free cloud GPU HTTP ${polResp.status}`;
+          lastErr = `Pollinations HTTP ${polResp.status}`;
         }
       } catch (err) {
         lastErr = err instanceof Error ? err.message : String(err);
-        d.log.warn('free cloud GPU endpoint failed, trying next candidate', { index: i, error: lastErr });
+        d.log.warn('Pollinations FLUX Pro endpoint failed, trying next candidate', { provider: ep.provider, error: lastErr });
       }
     }
   }
@@ -418,7 +458,9 @@ export async function generateCloudImage(
     size: record.size,
     url: record.url,
   };
-  const markdown = `![${opts.prompt.replace(/[\[\]\r\n]+/g, ' ').trim()}](${attachment.url})\n\n> 🎨 **الوصف البصري:** \`${promptUsed}\``;
+  const aspectLabel = dim.aspect === 'vertical' ? 'طولي / Poster (768×1024)' : dim.aspect === 'horizontal' ? 'عرضي / Landscape (1024×768)' : 'مربع / Square (1024×1024)';
+  const cleanAlt = opts.prompt.replace(/[\[\]\r\n]+/g, ' ').trim().slice(0, 100);
+  const markdown = `![${cleanAlt}](${attachment.url})\n\n> 🎨 **المحرك:** \`${provider}\` · **الأبعاد:** \`${aspectLabel}\`\n> 📝 **الوصف:** ${promptUsed}`;
 
   return { attachment, promptUsed, provider, markdown };
 }
