@@ -269,7 +269,7 @@ export class ModelRouter {
     } catch (err) {
       this.log.warn('provider completion failed', { model: resolution.model.id, error: String(err instanceof Error ? err.message : err) });
       const status = err instanceof HttpError ? err.status : 0;
-      if (!streamedAny && !req.modelId && (status === 429 || status === 502 || status === 503)) {
+      if (!streamedAny && (status === 429 || status === 502 || status === 503 || /rate limit|overloaded|capacity/i.test(String(err)))) {
         const cfg = this.config();
         const { models } = await this.inventory();
         const alt = models

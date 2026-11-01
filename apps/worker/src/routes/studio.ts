@@ -103,52 +103,110 @@ const VIDEO_PREFIX_RE =
   /^(انشئ\s+(?:فيديو|فديو|قديو)|أنشئ\s+(?:فيديو|فديو|قديو)|انشاء\s+(?:فيديو|فديو|قديو)|إنشاء\s+(?:فيديو|فديو|قديو)|صمم\s+(?:فيديو|فديو|قديو)|اصنع\s+(?:فيديو|فديو|قديو)|ولد\s+(?:فيديو|فديو|قديو)|ولّد\s+(?:فيديو|فديو|قديو)|سوي(?:\s+لي)?\s+(?:فيديو|فديو|قديو)|ابغى\s+(?:فيديو|فديو|قديو)|أريد\s+(?:فيديو|فديو|قديو)|اريد\s+(?:فيديو|فديو|قديو)|اعمل(?:\s+لي)?\s+(?:فيديو|فديو|قديو)|(?:فيديو|فديو|قديو)(?:\s+عن|\s+حول|\s+لـ)?|create a video(?:\s+about|\s+of)?|generate a video(?:\s+about|\s+of)?|make a video(?:\s+about|\s+of)?)\s*/i;
 
 /**
+ * Translates and expands Arabic or English prompts into crisp, domain-specific visual descriptions.
+ * Uses a robust fast LLM call with a rich semantic dictionary fallback so it NEVER defaults to an unrelated subject.
+ */
+async function translateVisualSubject(d: AppDeps, cleanText: string): Promise<string> {
+  const text = cleanText.trim();
+  if (!text) return 'cinematic visual showcase with professional lighting';
+
+  // If purely English, return as is
+  if (!hasArabic(text) && text.length > 5) {
+    return text;
+  }
+
+  // 1. Try fast LLM translation first (12s timeout)
+  const hasReadyLlm = d.router.providerInfos().some((p) => p.status === 'ready' && p.id !== 'diagnostic');
+  if (hasReadyLlm) {
+    try {
+      const resolved = await d.router.resolve({ modelClass: 'chat' });
+      const ac = new AbortController();
+      const timer = setTimeout(() => ac.abort(), 12000);
+      try {
+        const out = await d.router.complete(
+          {
+            modelId: resolved.model.id,
+            stream: false,
+            maxTokens: 75,
+            temperature: 0.3,
+            signal: ac.signal,
+            messages: [
+              {
+                role: 'system',
+                content:
+                  'Translate the user topic into ONE concise, vivid visual description in English (15-25 words). STRICTLY preserve the exact subject (e.g. cars, perfumes, coffee, store, sports, landscape). Output ONLY the English translation with no quotes or explanation.',
+              },
+              { role: 'user', content: text },
+            ],
+          },
+          {},
+          'chat',
+        );
+        const candidate = out.text.replace(/^["'`]+|["'`]+$/g, '').trim();
+        if (candidate.length >= 8 && !hasArabic(candidate)) {
+          return candidate;
+        }
+      } finally {
+        clearTimeout(timer);
+      }
+    } catch {
+      /* proceed to semantic dictionary fallback */
+    }
+  }
+
+  // 2. High-precision semantic vocabulary mapping for Arabic domains
+  const low = text.toLowerCase();
+  const descriptors: string[] = [];
+
+  if (/عطر|عطور|بخور|لبان|دخون/i.test(low)) {
+    descriptors.push('luxury artisanal perfume bottles, swirling aromatic frankincense smoke, warm amber glass, opulent oriental fragrance presentation');
+  }
+  if (/قهو[ةه]|كافيه|شاي|مقهى|اسبريسو/i.test(low)) {
+    descriptors.push('specialty artisan roasted coffee brewing, pouring rich espresso, aromatic steam, warm rustic coffeehouse lighting');
+  }
+  if (/سيار[ةه]|سيارات|مرسيدس|فيراري|بورش|لكزس|سباق|قياد[ةه]/i.test(low)) {
+    descriptors.push('sleek high-performance luxury sports car, dynamic aerodynamic curves, glowing headlights, desert highway sunset reflections');
+  }
+  if (/عمان|عماني|عُمان|مسقط|صلالة|نزوى/i.test(low)) {
+    descriptors.push('authentic Sultanate of Oman cultural architecture, historic clay fortresses, majestic desert dunes, turquoise Arabian Sea coastline');
+  }
+  if (/متجر|محل|دكان|سوق|منتجات|تسوق/i.test(low)) {
+    descriptors.push('elegant boutique retail store showcase, beautifully arranged premium products, warm ambient architectural lighting');
+  }
+  if (/طبيعة|جبل|جبال|وادي|بحر|شاطئ|رمال|صحراء/i.test(low)) {
+    descriptors.push('majestic natural landscape, rugged mountain peaks, golden sand dunes, dramatic sky with atmospheric volumetric lighting');
+  }
+  if (/طعام|مطعم|أكل|طبخ|شيف|وجب[ةه]/i.test(low)) {
+    descriptors.push('gourmet culinary masterpiece, appetizing fresh food plating, artisan kitchen, warm fine dining atmosphere');
+  }
+  if (/تقني[ةه]|تكنولوجيا|روبوت|ذكاء\s*اصطناعي|مستقبل|برمج/i.test(low)) {
+    descriptors.push('advanced futuristic technology showcase, glowing holographic interface, clean glass architecture, cybernetic aesthetic');
+  }
+  if (/حصان|خيل|صقر|جمل|جمال|نمر|أسد|حيوان/i.test(low)) {
+    descriptors.push('majestic noble Arabian animal portrait, golden sunlight highlights, powerful stance, expressive cinematic depth');
+  }
+  if (/فضاء|كواكب|نجوم|مجرة|فلك/i.test(low)) {
+    descriptors.push('deep cosmic nebula, vibrant stellar clouds, distant celestial planets, awe-inspiring galaxy vista');
+  }
+
+  if (descriptors.length > 0) {
+    return descriptors.join(', ');
+  }
+
+  // Fallback: clean transcription keywords
+  return `${text.replace(/[^\w\s\u0600-\u06FF]/g, ' ').slice(0, 80)}, vivid cinematic aesthetic, dramatic lighting, ultra detailed 8k`;
+}
+
+/**
  * Optionally translates/expands a user prompt into a crisp English visual prompt
  * when a free text LLM is configured; falls back gracefully with zero errors.
  */
 async function refineVisualPrompt(d: AppDeps, rawPrompt: string, skipEnhance = false): Promise<string> {
   const stripped = rawPrompt.replace(IMAGE_PREFIX_RE, '').trim();
-  const clean = stripped.length >= 2 ? stripped : 'منظر سينمائي خيالي لمدينة مستقبلية مضيئة عند الغروب وسط الجبال والطبيعة';
+  const clean = stripped.length >= 2 ? stripped : 'منظر سينمائي خيالي فائق الجمال والدقة';
 
   if (skipEnhance) return clean;
-  const hasReadyLlm = d.router.providerInfos().some((p) => p.status === 'ready' && p.id !== 'diagnostic');
-  if (!hasReadyLlm) {
-    return `${clean}, cinematic lighting, ultra detailed, sharp focus, 8k quality`;
-  }
-
-  try {
-    const resolved = await d.router.resolve({ modelClass: 'chat' });
-    const ac = new AbortController();
-    const timer = setTimeout(() => ac.abort(), 6500);
-    try {
-      const out = await d.router.complete(
-        {
-          modelId: resolved.model.id,
-          stream: false,
-          maxTokens: 90,
-          temperature: 0.5,
-          signal: ac.signal,
-          messages: [
-            {
-              role: 'system',
-              content:
-                'Convert the user request into ONE vivid, concise English image generation prompt (max 35 words). Output ONLY the English prompt with no quotes or explanation.',
-            },
-            { role: 'user', content: clean },
-          ],
-        },
-        {},
-        'chat',
-      );
-      const candidate = out.text.replace(/^["'`]+|["'`]+$/g, '').trim();
-      if (candidate.length >= 8) return candidate;
-    } finally {
-      clearTimeout(timer);
-    }
-  } catch {
-    // Graceful fallback if rate-limited or offline
-  }
-  return `${clean}, cinematic lighting, high detail, photorealistic`;
+  return translateVisualSubject(d, clean);
 }
 
 async function runWorkersAiImageModel(
@@ -327,35 +385,35 @@ interface PlannedVideo {
 
 async function planVideoStoryboard(d: AppDeps, rawPrompt: string, isAr: boolean): Promise<PlannedVideo> {
   const stripped = rawPrompt.replace(VIDEO_PREFIX_RE, '').trim();
-  const clean =
-    stripped.length >= 2
-      ? stripped
-      : isAr
-        ? 'رحلة سينمائية مذهلة فوق مدينة مستقبلية مضيئة وسط الجبال والنجوم'
-        : 'Epic cinematic journey over a glowing futuristic city amidst misty mountains and stars';
+  const clean = stripped.length >= 2 ? stripped : isAr ? 'رحلة سينمائية ملهمة ومبهرة' : 'Inspiring cinematic visual journey';
+
+  // Translate the subject to accurate English first so all scenes strictly revolve around the user's topic
+  const englishSubject = await translateVisualSubject(d, clean);
 
   const hasReadyLlm = d.router.providerInfos().some((p) => p.status === 'ready' && p.id !== 'diagnostic');
   if (hasReadyLlm) {
     try {
       const resolved = await d.router.resolve({ modelClass: 'chat' });
       const ac = new AbortController();
-      const timer = setTimeout(() => ac.abort(), 11000);
+      const timer = setTimeout(() => ac.abort(), 22000);
       try {
         const out = await d.router.complete(
           {
             modelId: resolved.model.id,
             stream: false,
-            maxTokens: 450,
-            temperature: 0.6,
+            maxTokens: 500,
+            temperature: 0.5,
             signal: ac.signal,
             messages: [
               {
                 role: 'system',
                 content:
-                  `You are a film director creating a 4-scene AI video storyboard. Respond with STRICT JSON ONLY (no markdown fences): ` +
-                  `{"title":"...","scenes":[{"caption":"...","visualPrompt":"..."}]} with exactly 4 scenes. ` +
-                  `Write "title" and each "caption" (1 short engaging sentence, max 14 words) in ${isAr ? 'Arabic' : 'English'}. ` +
-                  `Write each "visualPrompt" in vivid cinematic English (20-30 words, widescreen 16:9 composition, no text in image).`,
+                  `You are an award-winning cinematic video director. The user wants an AI video about: "${clean}" (Subject in English: "${englishSubject}"). ` +
+                  `Create a 4-scene video storyboard STRICTLY AND ONLY about this specific topic. Never invent an unrelated topic. ` +
+                  `Respond with STRICT JSON ONLY: {"title":"...","scenes":[{"caption":"...","visualPrompt":"..."}]} with exactly 4 scenes. ` +
+                  `"title": short engaging title in ${isAr ? 'Arabic' : 'English'}. ` +
+                  `"caption": 1 engaging spoken sentence in ${isAr ? 'Arabic' : 'English'} describing what happens in this scene. ` +
+                  `"visualPrompt": 25-35 words in English describing the exact visuals, subject (${englishSubject}), lighting, and 16:9 widescreen composition for image generation with no text.`,
               },
               { role: 'user', content: clean },
             ],
@@ -371,7 +429,9 @@ async function planVideoStoryboard(d: AppDeps, rawPrompt: string, isAr: boolean)
               title: (parsed.title || clean).slice(0, 80),
               scenes: parsed.scenes.slice(0, 4).map((s) => ({
                 caption: String(s.caption || clean).slice(0, 140),
-                visualPrompt: String(s.visualPrompt || 'Futuristic cinematic widescreen landscape, dramatic golden lighting, 8k photorealistic'),
+                visualPrompt: String(
+                  s.visualPrompt || `Cinematic 16:9 widescreen shot of ${englishSubject}, dramatic volumetric lighting, 8k photorealistic`,
+                ),
               })),
             };
           }
@@ -380,28 +440,25 @@ async function planVideoStoryboard(d: AppDeps, rawPrompt: string, isAr: boolean)
         clearTimeout(timer);
       }
     } catch {
-      // Fall back to deterministic storyboard below
+      // Fall back to subject-preserving deterministic storyboard below
     }
   }
 
-  const englishSubject = hasArabic(clean)
-    ? 'futuristic glowing oasis city nestled between dramatic mountains under twilight sky'
-    : clean;
-
+  // Guaranteed subject-preserving fallback matching the user's exact topic
   return {
     title: clean.slice(0, 70),
     scenes: isAr
       ? [
-          { caption: `مشهد افتتاحي: ${clean}`, visualPrompt: `Wide cinematic establishing shot of ${englishSubject}, golden hour lighting, dramatic atmosphere, ultra detailed 16:9` },
-          { caption: `تفاصيل المشهد عن قرب بزاوية سينمائية`, visualPrompt: `Detailed close-up cinematic shot of ${englishSubject}, shallow depth of field, rich textures, volumetric light` },
-          { caption: `حركة ديناميكية وإضاءة احترافية`, visualPrompt: `Dynamic aerial tracking angle of ${englishSubject}, vibrant atmosphere, dramatic perspective, film grain, 8k` },
-          { caption: `المشهد الختامي البانورامي`, visualPrompt: `Epic panoramic finale shot of ${englishSubject}, breathtaking horizon, cinematic color grading, masterpiece` },
+          { caption: `مشهد افتتاحي: ${clean}`, visualPrompt: `Cinematic wide establishing shot of ${englishSubject}, golden hour lighting, dramatic atmosphere, ultra detailed 16:9` },
+          { caption: `لقطة مقربة تبرز تفاصيل وجوهر المشهد`, visualPrompt: `Detailed cinematic close-up shot of ${englishSubject}, shallow depth of field, rich textures, professional studio light` },
+          { caption: `زاوية حركية ديناميكية مفعمة بالحيوية`, visualPrompt: `Dynamic low-angle tracking shot of ${englishSubject}, vibrant atmosphere, dramatic perspective, 8k photorealistic` },
+          { caption: `المشهد الختامي البانورامي المؤثر`, visualPrompt: `Epic breathtaking panoramic finale shot of ${englishSubject}, cinematic color grading, widescreen masterpiece` },
         ]
       : [
-          { caption: `Opening scene: ${clean}`, visualPrompt: `Wide cinematic establishing shot of ${englishSubject}, golden hour lighting, dramatic atmosphere, ultra detailed 16:9` },
-          { caption: `Intricate details up close`, visualPrompt: `Detailed close-up cinematic shot of ${englishSubject}, shallow depth of field, rich textures, volumetric light` },
-          { caption: `Dynamic motion and perspective`, visualPrompt: `Dynamic aerial tracking angle of ${englishSubject}, vibrant atmosphere, dramatic perspective, film grain, 8k` },
-          { caption: `Grand panoramic finale`, visualPrompt: `Epic panoramic finale shot of ${englishSubject}, breathtaking horizon, cinematic color grading, masterpiece` },
+          { caption: `Opening scene: ${clean}`, visualPrompt: `Cinematic wide establishing shot of ${englishSubject}, golden hour lighting, dramatic atmosphere, ultra detailed 16:9` },
+          { caption: `Detailed close-up capturing the essence`, visualPrompt: `Detailed cinematic close-up shot of ${englishSubject}, shallow depth of field, rich textures, professional studio light` },
+          { caption: `Dynamic motion and dramatic angle`, visualPrompt: `Dynamic low-angle tracking shot of ${englishSubject}, vibrant atmosphere, dramatic perspective, 8k photorealistic` },
+          { caption: `Grand breathtaking panoramic finale`, visualPrompt: `Epic breathtaking panoramic finale shot of ${englishSubject}, cinematic color grading, widescreen masterpiece` },
         ],
   };
 }

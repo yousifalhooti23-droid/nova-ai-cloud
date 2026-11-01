@@ -69,4 +69,7 @@ export const TOOL_RISK = {
   update_task: 'proposal',
   run_command: 'needs-approval',
   git_commit: 'needs-approval',
+  web_search: 'read-only',
+  web_fetch: 'read-only',
+  github_search: 'read-only',
 } as const;

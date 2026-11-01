@@ -220,7 +220,10 @@ export type ToolName =
   | 'git_diff'
   | 'git_log'
   | 'read_memory'
-  | 'write_memory';
+  | 'write_memory'
+  | 'web_search'
+  | 'web_fetch'
+  | 'github_search';
 
 export type ToolRisk = 'read-only' | 'proposal' | 'needs-approval' | 'destructive';
 

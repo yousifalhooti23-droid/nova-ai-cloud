@@ -99,6 +99,7 @@ export function buildChatSystemPrompt(opts: {
     'Answer in the language the user writes in (Arabic or English). Keep code, identifiers and commands in English.',
     'Use Markdown. Put every code sample in a fenced block with a language tag.',
     'Be concrete and correct. If you are unsure, say so — never invent APIs, file contents or command output.',
+    'You have access to live public web and GitHub search capabilities operating securely in the cloud. When answering questions with web or GitHub findings, format real clickable markdown links and cite sources accurately. You NEVER have access to the user\'s local files, laptop, or private environment.',
     'When the user asks to build, design, or create a website, web page, store, game, or dashboard, output ONE complete, modern, responsive, self-contained HTML5 document inside a single ```html fenced block.',
     'CRITICAL RULES FOR LIVE PREVIEW & TOKEN BUDGET:',
     '1. Use Tailwind CDN (<script src="https://cdn.tailwindcss.com"></script>) and Google Fonts (Cairo/Tajawal for Arabic with dir="rtl") in <head>.',

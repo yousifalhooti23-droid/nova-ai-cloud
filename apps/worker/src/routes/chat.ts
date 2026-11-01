@@ -8,9 +8,47 @@ import { sseResponse } from '../lib/sse.js';
 import { buildChatSystemPrompt } from '../agent/prompts.js';
 import { runAgent } from '../agent/loop.js';
 import { detectStudioIntent, generateCloudImage, generateCloudVideo } from './studio.js';
+import { performSafeGitHubSearch, performSafeWebSearch } from '../agent/tools/web-search.js';
 
 /** Read-only tool set for project-aware chat (no mutations, ever). */
-const CHAT_TOOLS = ['list_files', 'read_file', 'search_project', 'read_memory', 'git_status', 'git_log'];
+const CHAT_TOOLS = [
+  'web_search',
+  'web_fetch',
+  'github_search',
+  'list_files',
+  'read_file',
+  'search_project',
+  'read_memory',
+  'git_status',
+  'git_log',
+];
+
+export function detectWebSearchIntent(message: string): { isSearch: boolean; isGitHub: boolean; query: string } {
+  const m = message.trim();
+  const ghMatch =
+    m.match(/(?:شوف|ابحث|دور|هات|طلع)(?:\s+لي)?(?:\s+من)?\s+(?:جت\s*هاب|جيت\s*هاب|github)(?:\s+(?:عن|في|حول))?\s+(.+)/i) ||
+    m.match(/(?:search|find)(?:\s+on)?\s+github(?:\s+for)?\s+(.+)/i) ||
+    m.match(/github\.com\/([a-zA-Z0-9_\-\/]+)/i);
+  if (ghMatch) {
+    return { isSearch: true, isGitHub: true, query: ghMatch[1].trim() };
+  }
+
+  const webMatch =
+    m.match(/(?:ابحث|دور|هات|طلع)(?:\s+لي)?\s+(?:في\s+)?(?:النت|الانترنت|الإنترنت|الويب|قوقل|جوجل)(?:\s+(?:عن|في|حول))?\s+(.+)/i) ||
+    m.match(/(?:search|find|google)(?:\s+the)?\s+(?:web|internet|google)(?:\s+for)?\s+(.+)/i);
+  if (webMatch) {
+    return { isSearch: true, isGitHub: false, query: webMatch[1].trim() };
+  }
+
+  if (/(?:برزنتيشن|عرض\s+تقديمي|قالب\s+عرض|مستودع|مكتبة)\s+(?:عن|لـ|في)\s+(.+)/i.test(m)) {
+    const q = m.match(/(?:برزنتيشن|عرض\s+تقديمي|قالب\s+عرض|مستودع|مكتبة)\s+(?:عن|لـ|في)\s+(.+)/i)?.[1]?.trim();
+    if (q && q.length >= 3) {
+      return { isSearch: true, isGitHub: false, query: q };
+    }
+  }
+
+  return { isSearch: false, isGitHub: false, query: '' };
+}
 
 export function registerChatRoutes(app: Hono<AppEnv>) {
   /**
@@ -154,6 +192,24 @@ export function registerChatRoutes(app: Hono<AppEnv>) {
         ]);
         const globalMemory = await d.store.listMemory('global', null);
 
+        const searchIntent = detectWebSearchIntent(effectiveMessage);
+        let webSearchContext = '';
+        if (searchIntent.isSearch && searchIntent.query) {
+          try {
+            const hits = searchIntent.isGitHub
+              ? await performSafeGitHubSearch(searchIntent.query, 5)
+              : await performSafeWebSearch(searchIntent.query, 5);
+            if (hits.length > 0) {
+              const formatted = hits
+                .map((h, i) => `[${i + 1}] Title: ${h.title}\nSource: ${h.source}\nURL: ${h.url}\nSnippet: ${h.snippet}`)
+                .join('\n\n');
+              webSearchContext = `\n\n[LIVE PUBLIC WEB & GITHUB SEARCH RESULTS (Cloud Sandbox - 100% Secure, No Local Device Access)]:\nQuery: "${searchIntent.query}"\n\n${formatted}\n\n[Instructions: Use the above live verified results to answer the user's question accurately. Include real markdown links to the sources. Reassure the user that this search ran purely in the cloud with zero access to their laptop or personal files.]`;
+            }
+          } catch {
+            /* graceful fallback */
+          }
+        }
+
         const system = [
           buildChatSystemPrompt({ memory: [...memory, ...globalMemory], project, studioMode: studioIntent ?? req.studioMode ?? null }),
           req.systemPrompt?.trim() ? req.systemPrompt.trim() : '',
@@ -167,7 +223,7 @@ export function registerChatRoutes(app: Hono<AppEnv>) {
           if (m.status === 'error' && !m.content) continue;
           messages.push({ role: m.role, content: truncate(m.content, 12_000) });
         }
-        const userTurn: ChatTurn = { role: 'user', content: withAttachments(effectiveMessage, req.attachments ?? []) };
+        const userTurn: ChatTurn = { role: 'user', content: withAttachments(effectiveMessage + webSearchContext, req.attachments ?? []) };
         messages.push(userTurn);
 
         const imageRefs = (req.attachments ?? []).filter((a) => /^image\/(png|jpe?g|webp|gif)$/i.test(a.mime));
