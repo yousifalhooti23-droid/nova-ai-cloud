@@ -104,7 +104,7 @@ export function buildChatSystemPrompt(opts: {
     'CRITICAL RULES FOR LIVE PREVIEW & TOKEN BUDGET:',
     '1. Use Tailwind CDN (<script src="https://cdn.tailwindcss.com"></script>) and Google Fonts (Cairo/Tajawal for Arabic with dir="rtl") in <head>.',
     '2. DO NOT write massive custom <style> blocks in <head>. Apply Tailwind utility classes directly in HTML tags so you do not run out of tokens before finishing the page.',
-    '3. You MUST generate the complete <body> with real visual sections (navbar, hero, cards/products/features, real interactive JavaScript, and footer).',
+    '3. You MUST generate the complete <body> with real visual sections (navbar, hero, cards/products/features, interactive JavaScript, and footer) with high-contrast readable colors (e.g. bg-slate-950 text-slate-100 or bg-white text-slate-900). NEVER leave hero sections blank or with invisible text.',
     '4. ALWAYS close </body> and </html> before the ending ``` fence.',
   ];
   if (opts.studioMode === 'website') {

@@ -1,5 +1,6 @@
 import type { ModelClass, ModelInfo, ProviderId } from '../types.js';
 import { GEMINI_MODELS, GEMINI_FREE_LIMITS } from './gemini.js';
+import { GROQ_MODELS } from './groq.js';
 import { OPENROUTER_MODELS, OPENROUTER_FREE_LIMITS } from './openrouter.js';
 import { WORKERS_AI_MODELS, WORKERS_AI_FREE_PLAN_NOTE, WORKERS_AI_VERIFIED_AT } from './workers-ai.js';
 
@@ -7,9 +8,9 @@ import { WORKERS_AI_MODELS, WORKERS_AI_FREE_PLAN_NOTE, WORKERS_AI_VERIFIED_AT } 
  * The static (verified) catalog. Providers that are not configured still show
  * up here — greyed out with a reason — so the UI never silently hides options.
  */
-export const CATALOG: ModelInfo[] = [...GEMINI_MODELS, ...WORKERS_AI_MODELS, ...OPENROUTER_MODELS];
+export const CATALOG: ModelInfo[] = [...GEMINI_MODELS, ...GROQ_MODELS, ...WORKERS_AI_MODELS, ...OPENROUTER_MODELS];
 
-export { GEMINI_MODELS, GEMINI_FREE_LIMITS, OPENROUTER_MODELS, OPENROUTER_FREE_LIMITS, WORKERS_AI_MODELS, WORKERS_AI_FREE_PLAN_NOTE, WORKERS_AI_VERIFIED_AT };
+export { GEMINI_MODELS, GEMINI_FREE_LIMITS, GROQ_MODELS, OPENROUTER_MODELS, OPENROUTER_FREE_LIMITS, WORKERS_AI_MODELS, WORKERS_AI_FREE_PLAN_NOTE, WORKERS_AI_VERIFIED_AT };
 export { fromOpenRouterApi, type OpenRouterApiModel } from './openrouter.js';
 export { AGENTIC_HARNESS_GATED, AGENTIC_HARNESS_GATE_NOTE } from './openrouter.js';
 export { WORKERS_AI_EMBEDDING_MODELS } from './workers-ai.js';
@@ -54,13 +55,13 @@ export const PROVIDER_META: Record<
     verifiedAt: '2026-10-30',
   },
   groq: {
-    label: 'Groq',
-    docsUrl: 'https://console.groq.com/docs/models',
+    label: 'Groq (Ultra-Fast LPU)',
+    docsUrl: 'https://console.groq.com/keys',
     keyEnvVar: 'GROQ_API_KEY',
     freeTierSummary:
-      'NOT verified as free. On 2026-10-30 the Groq model page lists per-token prices for most chat models and marks Llama 3.1/3.3 as "Enterprise — Contact Sales". Configure only if your account has access.',
-    requiresCard: null,
-    verifiedAt: '2026-10-30',
+      'Ultra-fast LPUs (~300 tokens/sec) hosting Qwen 3.8 27B and Allam 2. Free tier available with no credit card required.',
+    requiresCard: false,
+    verifiedAt: '2026-11-01',
   },
   custom: {
     label: 'Custom OpenAI-compatible',

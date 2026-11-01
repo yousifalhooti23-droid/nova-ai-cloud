@@ -17,7 +17,7 @@ import {
   Badge, Button, Dot, Field, Modal, Select, Spinner, Switch, TextArea, TextInput,
 } from '@/components/ui';
 
-const PROVIDER_ORDER: ProviderId[] = ['gemini', 'openrouter', 'workers-ai', 'groq', 'custom', 'diagnostic'];
+const PROVIDER_ORDER: ProviderId[] = ['gemini', 'groq', 'openrouter', 'workers-ai', 'custom', 'diagnostic'];
 
 /** Stable empty reference — see the note in ModelPicker. */
 const NO_MODELS: ModelInfo[] = [];

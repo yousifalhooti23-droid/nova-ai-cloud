@@ -70,9 +70,9 @@ export function prepareWebsiteHtml(rawCode: string): PreparedWebsite {
   // 5. Shim localStorage & sessionStorage so sandboxed scripts don't crash on opaque origin
   const storageShim = `<script>
 (function() {
-  try { window.localStorage.getItem('_t'); } catch(e) {
+  function makeMock() {
     var mem = {};
-    window.localStorage = {
+    return {
       getItem: function(k) { return Object.prototype.hasOwnProperty.call(mem, k) ? mem[k] : null; },
       setItem: function(k, v) { mem[k] = String(v); },
       removeItem: function(k) { delete mem[k]; },
@@ -80,7 +80,12 @@ export function prepareWebsiteHtml(rawCode: string): PreparedWebsite {
       key: function(i) { return Object.keys(mem)[i] || null; },
       get length() { return Object.keys(mem).length; }
     };
-    window.sessionStorage = Object.assign({}, window.localStorage);
+  }
+  try { window.localStorage.getItem('_t'); } catch(e) {
+    try { Object.defineProperty(window, 'localStorage', { value: makeMock(), configurable: true, writable: true }); } catch(_) {}
+  }
+  try { window.sessionStorage.getItem('_t'); } catch(e) {
+    try { Object.defineProperty(window, 'sessionStorage', { value: makeMock(), configurable: true, writable: true }); } catch(_) {}
   }
 })();
 </script>`;
@@ -94,7 +99,7 @@ export function prepareWebsiteHtml(rawCode: string): PreparedWebsite {
   }
   const synthesizedRootStyle = houdiniProps.length > 0 ? `<style>\n:root {\n  ${houdiniProps.join('\n  ')}\n}\n</style>` : '';
 
-  // Base typography & dark canvas rendering fallback (ensures text is NEVER white-on-white)
+  // Base typography & contrast rendering fallback (ensures text is NEVER invisible and animation opacity is visible)
   const baseFallbackStyle = `<style>
   html {
     background-color: #0b0e14;
@@ -107,6 +112,12 @@ export function prepareWebsiteHtml(rawCode: string): PreparedWebsite {
     background-color: #0b0e14;
     color: #f1f5f9;
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Cairo", "Tajawal", sans-serif;
+  }
+  /* Animation safety: if AOS, GSAP, or Wow.js fails to initialize, elements must not stay stuck at opacity:0 */
+  [data-aos], .fade-in, .animate-fade {
+    opacity: 1 !important;
+    visibility: visible !important;
+    transform: none !important;
   }
 </style>`;
 

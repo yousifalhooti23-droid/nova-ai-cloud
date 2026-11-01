@@ -93,7 +93,7 @@ function bool(value: string | undefined, fallback = false): boolean {
  */
 export function loadConfig(env: RawEnv): NovaConfig {
   const runtime = read(env, 'NOVA_RUNTIME') === 'node' ? 'node' : 'workers';
-  const priorityRaw = list(read(env, 'NOVA_PROVIDER_PRIORITY'), ['gemini', 'openrouter', 'workers-ai', 'groq', 'custom']);
+  const priorityRaw = list(read(env, 'NOVA_PROVIDER_PRIORITY'), ['gemini', 'groq', 'openrouter', 'workers-ai', 'custom']);
   const providerPriority = priorityRaw as ProviderId[];
 
   const hasAiBinding = Boolean(env.AI);
