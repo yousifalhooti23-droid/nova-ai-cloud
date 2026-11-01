@@ -225,7 +225,7 @@ export function registerMiscRoutes(app: Hono<AppEnv>) {
       return c.json(hidden);
     }
     const eff = withRuntimeSecrets(d.cfg, d.secrets);
-    const ids: ProviderId[] = ['openrouter', 'custom', 'groq'];
+    const ids: ProviderId[] = ['gemini', 'openrouter', 'groq', 'custom'];
     const keys: LocalProviderKeyStatus[] = ids.map((id) => {
       const p = eff.providers[id];
       const injected = d.secrets.get(id);
@@ -274,8 +274,8 @@ export function registerMiscRoutes(app: Hono<AppEnv>) {
 
     const req = (await c.req.json().catch(() => ({}))) as LocalProviderKeyUpdateRequest;
     const provider = req.provider;
-    if (!provider || !['openrouter', 'groq', 'custom'].includes(provider)) {
-      throw badRequest('provider must be openrouter, groq or custom', 'bad_provider');
+    if (!provider || !['gemini', 'openrouter', 'groq', 'custom'].includes(provider)) {
+      throw badRequest('provider must be gemini, openrouter, groq or custom', 'bad_provider');
     }
 
     if (req.remove) {
@@ -353,6 +353,7 @@ function envMapForProvider(
   apiKey: string | undefined,
   baseUrl: string | undefined,
 ): Record<string, string | null> {
+  if (provider === 'gemini') return { GEMINI_API_KEY: apiKey ?? null };
   if (provider === 'openrouter') return { OPENROUTER_API_KEY: apiKey ?? null };
   if (provider === 'groq') return { GROQ_API_KEY: apiKey ?? null };
   if (provider === 'custom') {

@@ -46,6 +46,6 @@
     "NOVA_OWNER_NAME": "Yousif",
     "NOVA_USER_QUOTA_LIMIT": "20",
     "NOVA_MODEL_CHAT": "workers-ai:llama-3.3-70b-instruct-fp8-fast",
-    "NOVA_VERSION": "0.4.8"
+    "NOVA_VERSION": "0.4.9"
   }
 }

@@ -16,6 +16,7 @@ export const MODEL_CLASSES: ModelClass[] = ['chat', 'reasoning', 'coding', 'long
 export type ProviderId =
   | 'workers-ai'
   | 'openrouter'
+  | 'gemini'
   | 'groq'
   | 'custom'
   | 'diagnostic';

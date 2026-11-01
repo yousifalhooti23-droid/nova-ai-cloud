@@ -93,7 +93,7 @@ function bool(value: string | undefined, fallback = false): boolean {
  */
 export function loadConfig(env: RawEnv): NovaConfig {
   const runtime = read(env, 'NOVA_RUNTIME') === 'node' ? 'node' : 'workers';
-  const priorityRaw = list(read(env, 'NOVA_PROVIDER_PRIORITY'), ['workers-ai', 'openrouter', 'custom']);
+  const priorityRaw = list(read(env, 'NOVA_PROVIDER_PRIORITY'), ['gemini', 'openrouter', 'workers-ai', 'groq', 'custom']);
   const providerPriority = priorityRaw as ProviderId[];
 
   const hasAiBinding = Boolean(env.AI);
@@ -107,6 +107,13 @@ export function loadConfig(env: RawEnv): NovaConfig {
   const customKey = read(env, 'NOVA_CUSTOM_API_KEY');
 
   const providers: Record<ProviderId, ProviderConfig> = {
+    gemini: {
+      id: 'gemini',
+      enabled: Boolean(read(env, 'GEMINI_API_KEY')),
+      apiKey: read(env, 'GEMINI_API_KEY'),
+      baseUrl: read(env, 'GEMINI_BASE_URL') ?? 'https://generativelanguage.googleapis.com/v1beta/openai',
+      missing: read(env, 'GEMINI_API_KEY') ? undefined : 'GEMINI_API_KEY is not set. Get a free key from https://aistudio.google.com/app/apikey (no card required).',
+    },
     'workers-ai': {
       id: 'workers-ai',
       enabled: hasAiBinding,

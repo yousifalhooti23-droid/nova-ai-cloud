@@ -17,7 +17,7 @@ import {
   Badge, Button, Dot, Field, Modal, Select, Spinner, Switch, TextArea, TextInput,
 } from '@/components/ui';
 
-const PROVIDER_ORDER: ProviderId[] = ['workers-ai', 'openrouter', 'groq', 'custom', 'diagnostic'];
+const PROVIDER_ORDER: ProviderId[] = ['gemini', 'openrouter', 'workers-ai', 'groq', 'custom', 'diagnostic'];
 
 /** Stable empty reference — see the note in ModelPicker. */
 const NO_MODELS: ModelInfo[] = [];
@@ -259,7 +259,8 @@ function AccessTokenField() {
 /* -------------------------------------------------------------- providers */
 
 function ProvidersTab() {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
+  const isAr = locale === 'ar';
   const health = useAppStore((s) => s.health);
   const models = useAppStore((s) => s.models);
   const refreshCatalog = useAppStore((s) => s.refreshCatalog);
@@ -343,7 +344,7 @@ function ProvidersTab() {
   const providers = health?.providers ?? models?.providers ?? [];
   const ordered = PROVIDER_ORDER
     .map((id) => providers.find((p) => p.id === id))
-    .filter((p): p is NonNullable<typeof p> => Boolean(p && (p.id === 'workers-ai' || p.id === 'openrouter' || p.status === 'ready')));
+    .filter((p): p is NonNullable<typeof p> => Boolean(p && p.id !== 'diagnostic'));
 
   return (
     <div className="flex flex-col gap-3">
@@ -377,7 +378,7 @@ function ProvidersTab() {
         {ordered.map((p) => {
           const count = models?.models.filter((m) => m.provider === p.id).length ?? p.modelCount;
           const keyMeta = localKeys?.keys.find((k) => k.provider === p.id);
-          const canEditKey = Boolean(localKeys?.writable && (p.id === 'openrouter' || p.id === 'custom' || p.id === 'groq'));
+          const canEditKey = Boolean(localKeys?.writable && (p.id === 'gemini' || p.id === 'openrouter' || p.id === 'custom' || p.id === 'groq'));
           return (
             <li key={p.id} className="rounded-lg border border-line bg-surface p-2.5">
               <div className="flex flex-wrap items-center gap-2">
@@ -386,7 +387,7 @@ function ProvidersTab() {
                   {t(`providers.${p.id}` as never)}
                 </span>
                 <StatusBadge status={p.status} />
-                {p.id === 'openrouter' ? <Badge tone="success">{t('model.free')}</Badge> : null}
+                {p.id === 'gemini' || p.id === 'openrouter' ? <Badge tone="success">{t('model.free')}</Badge> : null}
                 {p.simulated ? <Badge tone="warning">echo — {t('providers.diagnostic')}</Badge> : null}
                 {keyMeta?.masked ? (
                   <Badge tone="neutral">{t('providers.savedMask', { mask: keyMeta.masked })}</Badge>
@@ -410,7 +411,17 @@ function ProvidersTab() {
               </div>
               <p className="mt-1.5 text-[11.5px] leading-relaxed text-dim">{p.detail}</p>
               <p className="mt-1 text-[11px] leading-relaxed text-dim/80">{t(`providers.${p.id}.hint` as never)}</p>
-              {p.id === 'openrouter' ? (
+              {p.id === 'gemini' ? (
+                <a
+                  href="https://aistudio.google.com/app/apikey"
+                  target="_blank"
+                  rel="noreferrer noopener"
+                  className="mt-1.5 inline-flex items-center gap-1 text-[11.5px] font-medium text-accent underline"
+                >
+                  <ExternalLink size={11} />
+                  {isAr ? 'احصل على مفتاح Google AI Studio مجاني (بدون بطاقة)' : 'Get a free Google Gemini key (no card)'}
+                </a>
+              ) : p.id === 'openrouter' ? (
                 <a
                   href="https://openrouter.ai/settings/keys"
                   target="_blank"
@@ -419,6 +430,16 @@ function ProvidersTab() {
                 >
                   <ExternalLink size={11} />
                   {t('providers.getFreeKey')}
+                </a>
+              ) : p.id === 'groq' ? (
+                <a
+                  href="https://console.groq.com/keys"
+                  target="_blank"
+                  rel="noreferrer noopener"
+                  className="mt-1.5 inline-flex items-center gap-1 text-[11.5px] font-medium text-accent underline"
+                >
+                  <ExternalLink size={11} />
+                  {isAr ? 'احصل على مفتاح Groq مجاني' : 'Get free Groq key'}
                 </a>
               ) : p.docsUrl ? (
                 <a href={p.docsUrl} target="_blank" rel="noreferrer noopener" className="mt-1 inline-block text-[11px] text-info underline">
@@ -448,7 +469,15 @@ function ProvidersTab() {
                           void saveKey(p.id);
                         }
                       }}
-                      placeholder={t('providers.keyInputPlaceholder')}
+                      placeholder={
+                        p.id === 'gemini'
+                          ? 'AIzaSy...'
+                          : p.id === 'openrouter'
+                            ? 'sk-or-v1-...'
+                            : p.id === 'groq'
+                              ? 'gsk_...'
+                              : t('providers.keyInputPlaceholder')
+                      }
                       dir="ltr"
                       className="min-w-[200px] flex-1 font-mono !text-[11.5px]"
                     />

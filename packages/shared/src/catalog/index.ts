@@ -1,4 +1,5 @@
 import type { ModelClass, ModelInfo, ProviderId } from '../types.js';
+import { GEMINI_MODELS, GEMINI_FREE_LIMITS } from './gemini.js';
 import { OPENROUTER_MODELS, OPENROUTER_FREE_LIMITS } from './openrouter.js';
 import { WORKERS_AI_MODELS, WORKERS_AI_FREE_PLAN_NOTE, WORKERS_AI_VERIFIED_AT } from './workers-ai.js';
 
@@ -6,9 +7,9 @@ import { WORKERS_AI_MODELS, WORKERS_AI_FREE_PLAN_NOTE, WORKERS_AI_VERIFIED_AT } 
  * The static (verified) catalog. Providers that are not configured still show
  * up here — greyed out with a reason — so the UI never silently hides options.
  */
-export const CATALOG: ModelInfo[] = [...WORKERS_AI_MODELS, ...OPENROUTER_MODELS];
+export const CATALOG: ModelInfo[] = [...GEMINI_MODELS, ...WORKERS_AI_MODELS, ...OPENROUTER_MODELS];
 
-export { OPENROUTER_MODELS, OPENROUTER_FREE_LIMITS, WORKERS_AI_MODELS, WORKERS_AI_FREE_PLAN_NOTE, WORKERS_AI_VERIFIED_AT };
+export { GEMINI_MODELS, GEMINI_FREE_LIMITS, OPENROUTER_MODELS, OPENROUTER_FREE_LIMITS, WORKERS_AI_MODELS, WORKERS_AI_FREE_PLAN_NOTE, WORKERS_AI_VERIFIED_AT };
 export { fromOpenRouterApi, type OpenRouterApiModel } from './openrouter.js';
 export { AGENTIC_HARNESS_GATED, AGENTIC_HARNESS_GATE_NOTE } from './openrouter.js';
 export { WORKERS_AI_EMBEDDING_MODELS } from './workers-ai.js';
@@ -28,6 +29,14 @@ export const PROVIDER_META: Record<
     verifiedAt: string;
   }
 > = {
+  gemini: {
+    label: 'Google Gemini (AI Studio)',
+    docsUrl: 'https://aistudio.google.com/app/apikey',
+    keyEnvVar: 'GEMINI_API_KEY',
+    freeTierSummary: `${GEMINI_FREE_LIMITS.requestsPerMinute} req/min, ${GEMINI_FREE_LIMITS.requestsPerDay} req/day, 1M tokens/min 100% free forever without credit card.`,
+    requiresCard: false,
+    verifiedAt: GEMINI_FREE_LIMITS.verifiedAt,
+  },
   'workers-ai': {
     label: 'Cloudflare Workers AI',
     docsUrl: 'https://developers.cloudflare.com/workers-ai/',

@@ -1,4 +1,4 @@
-import { CATALOG, OPENROUTER_MODELS, WORKERS_AI_MODELS, type ModelInfo, type ProviderId } from '@nova/shared';
+import { CATALOG, GEMINI_MODELS, OPENROUTER_MODELS, WORKERS_AI_MODELS, type ModelInfo, type ProviderId } from '@nova/shared';
 import type { NovaConfig, RawEnv } from '../env.js';
 import type { Store } from '../storage/types.js';
 import { DiagnosticAdapter } from './providers/diagnostic.js';
@@ -20,6 +20,12 @@ export function buildAdapters(env: RawEnv, store: Store, cached: ModelInfo[]): P
   };
 
   return [
+    new OpenAiCompatibleAdapter(
+      'gemini',
+      'Google Gemini',
+      () => dedupe([...GEMINI_MODELS, ...cachedFor('gemini')]),
+      'GEMINI_API_KEY is not set. Get a 100% free key from https://aistudio.google.com/app/apikey (no card required).',
+    ),
     new WorkersAiAdapter(() => (env.AI as never) ?? undefined, env),
     new OpenAiCompatibleAdapter(
       'openrouter',
@@ -31,7 +37,7 @@ export function buildAdapters(env: RawEnv, store: Store, cached: ModelInfo[]): P
       'groq',
       'Groq',
       () => cachedFor('groq'),
-      'GROQ_API_KEY is not set. NOTE: on 2026-10-30 Groq listed most chat models as paid/Enterprise — verify your access before relying on it.',
+      'GROQ_API_KEY is not set. Get a free key from https://console.groq.com/keys.',
     ),
     new OpenAiCompatibleAdapter(
       'custom',
@@ -46,6 +52,7 @@ export function buildAdapters(env: RawEnv, store: Store, cached: ModelInfo[]): P
 /** Static catalog (verified) — used for model metadata lookups. */
 export const STATIC_CATALOG = CATALOG;
 export const STATIC_PROVIDERS: Record<string, ModelInfo[]> = {
+  gemini: GEMINI_MODELS,
   'workers-ai': WORKERS_AI_MODELS,
   openrouter: OPENROUTER_MODELS,
 };
