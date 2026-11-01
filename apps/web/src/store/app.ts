@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import type { AuthSessionResponse, AuthUser, HealthResponse, ModelsResponse, SandboxStatusResponse, SettingsResponse } from '@nova/shared';
-import { api, describeApiError, setStoredSessionToken, type ProbeResponse } from '@/lib/api';
+import { api, describeApiError, setAuthExpiredHandler, setStoredSessionToken, type ProbeResponse } from '@/lib/api';
 import type { Locale } from '@/i18n';
 
 declare const __NOVA_BUILD_VERSION__: string | undefined;
@@ -112,10 +112,10 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   async init() {
     if (get().ready) return;
-    await Promise.all([get().refreshHealth(), get().refreshAuth(), get().refreshModels()]);
+    await Promise.all([get().refreshHealth(), get().refreshAuth()]);
     const { health, authUser } = get();
     if (!health?.userAuthEnabled || authUser) {
-      await Promise.all([get().loadSandbox(), get().loadSettings()]);
+      await Promise.all([get().refreshModels(), get().loadSandbox(), get().loadSettings()]);
     }
     set({ ready: true });
   },
@@ -351,6 +351,17 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
   },
 }));
+
+setAuthExpiredHandler(() => {
+  const s = useAppStore.getState();
+  if (!s.health?.userAuthEnabled || !s.authUser) return;
+  setStoredSessionToken('');
+  useAppStore.setState({ authUser: null, settingsOpen: false });
+  useAppStore.getState().toast({
+    kind: 'error',
+    message: s.locale === 'ar' ? 'انتهت الجلسة — يرجى تسجيل الدخول مجدداً' : 'Session expired — please sign in again',
+  });
+});
 
 function pickPrefs(s: AppState): Prefs {
   return {

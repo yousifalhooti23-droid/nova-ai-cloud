@@ -39,8 +39,11 @@ export function Composer({ projectId, onNeedProject }: { projectId?: string | nu
   const canSend = (value.trim().length > 0 || composer.attachments.length > 0) && !streaming && !composer.uploading;
 
   const submit = () => {
-    if (!canSend) return;
-    const text = value.trim();
+    // Read the DOM value: on iOS/Android predictive keyboards React state can lag
+    // the textarea by the last (still-composing) word.
+    const text = (taRef.current?.value ?? value).trim();
+    if (streaming || composer.uploading) return;
+    if (!text && composer.attachments.length === 0) return;
     setValue('');
     if (taRef.current) {
       taRef.current.style.height = 'auto';

@@ -211,32 +211,15 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const finalMessage = trimmed || 'حلل واشرح الوسائط المرفقة بالتفصيل.';
     const activeStudioMode = studioModeOverride ?? composer.studioMode;
 
+    // Show the user's bubble + "thinking" state IMMEDIATELY, before any network
+    // round-trip. Previously a failed/slow conversation-create on mobile returned
+    // silently: the composer cleared and nothing appeared on screen at all.
     let conversationId = get().activeId;
     const isLocalPlaceholder = !conversationId || conversationId.startsWith('conv_local');
-    if (isLocalPlaceholder) {
-      try {
-        const { conversation } = await api.createConversation({
-          projectId: projectId ?? null,
-          modelId: composer.modelId,
-          modelClass: composer.modelClass,
-          memoryEnabled: Boolean(projectId),
-        });
-        conversationId = conversation.id;
-        set((s) => ({
-          conversations: [conversation, ...s.conversations],
-          activeId: conversation.id,
-          messages: { ...s.messages, [conversation.id]: [] },
-        }));
-      } catch (err) {
-        set({ lastError: describeApiError(err) });
-        return;
-      }
-    }
-
-    const targetId = conversationId!;
+    const localId = isLocalPlaceholder ? (conversationId ?? newId('conv_local')) : conversationId!;
     const optimistic: ChatMessage = {
       id: newId('msg_local'),
-      conversationId: targetId,
+      conversationId: localId,
       role: 'user',
       content: finalMessage,
       attachments: composer.attachments.map((a) => ({ id: a.id, name: a.name, mime: a.mime, size: a.size, url: a.url })),
@@ -244,10 +227,47 @@ export const useChatStore = create<ChatState>((set, get) => ({
       createdAt: new Date().toISOString(),
     };
     set((s) => ({
-      messages: { ...s.messages, [targetId]: [...(s.messages[targetId] ?? []), optimistic] },
-      streaming: { ...emptyStreaming, active: true, conversationId: targetId },
+      activeId: localId,
+      messages: { ...s.messages, [localId]: [...(s.messages[localId] ?? []), optimistic] },
+      streaming: { ...emptyStreaming, active: true, conversationId: localId },
       lastError: null,
     }));
+
+    if (isLocalPlaceholder) {
+      try {
+        const { conversation } = await withTimeout(
+          api.createConversation({
+            projectId: projectId ?? null,
+            modelId: composer.modelId,
+            modelClass: composer.modelClass,
+            memoryEnabled: Boolean(projectId),
+          }),
+          20000,
+        );
+        conversationId = conversation.id;
+        set((s) => {
+          const messages = { ...s.messages };
+          const pending = (messages[localId] ?? []).map((m) => ({ ...m, conversationId: conversation.id }));
+          delete messages[localId];
+          messages[conversation.id] = pending;
+          return {
+            conversations: [conversation, ...s.conversations],
+            activeId: s.activeId === localId ? conversation.id : s.activeId,
+            messages,
+            streaming: { ...s.streaming, conversationId: conversation.id },
+          };
+        });
+      } catch (err) {
+        const info = describeApiError(err);
+        set((s) => ({
+          lastError: info,
+          streaming: { ...s.streaming, active: false, error: info.message || 'network' },
+        }));
+        return;
+      }
+    }
+
+    const targetId = conversationId!;
 
     const { url, init } = api.chatBody({
       conversationId: targetId,
@@ -271,6 +291,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
     // Server is the source of truth for persisted messages.
     if (!targetId.startsWith('conv_local')) {
       await get().reloadMessages(targetId);
+      // If the server already persisted the assistant turn (answer or error),
+      // drop the transient streaming bubble so it is not shown twice.
+      const last = (get().messages[targetId] ?? []).at(-1);
+      if (last?.role === 'assistant') set({ streaming: emptyStreaming });
     }
     void get().loadConversations(projectId);
     void useAppStore.getState().refreshAuth();
@@ -306,6 +330,23 @@ export const useChatStore = create<ChatState>((set, get) => ({
     set({ conversations: [], activeId: null, messages: {}, streaming: emptyStreaming, lastError: null });
   },
 }));
+
+/** Reject if a request hangs (flaky mobile networks) instead of waiting forever. */
+function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const t = setTimeout(() => reject(new Error('network')), ms);
+    p.then(
+      (v) => {
+        clearTimeout(t);
+        resolve(v);
+      },
+      (e) => {
+        clearTimeout(t);
+        reject(e);
+      },
+    );
+  });
+}
 
 /** Fold one SSE event into the streaming slice. */
 function applyChatEvent(

@@ -6,6 +6,7 @@
  * @nova/shared so the worker and the browser cannot drift apart.
  */
 import { createSseParser, type ServerEvent } from '@nova/shared';
+import { notifyAuthExpired } from './api';
 
 export interface StreamHandle {
   /** Abort the in-flight stream (server notices via the closed socket). */
@@ -22,7 +23,12 @@ export function streamRequest(
   const done = (async () => {
     let res: Response;
     try {
-      res = await fetch(url, { ...init, signal: controller.signal, headers: { accept: 'text/event-stream', ...(init.headers ?? {}) } });
+      res = await fetch(url, {
+        credentials: 'same-origin',
+        ...init,
+        signal: controller.signal,
+        headers: { accept: 'text/event-stream', ...(init.headers ?? {}) },
+      });
     } catch (err) {
       if (controller.signal.aborted) return { ok: false, status: 0, error: 'aborted' };
       onEvent({ type: 'error', message: err instanceof Error ? err.message : String(err), code: 'network_error' });
@@ -39,6 +45,9 @@ export function streamRequest(
         code = parsed.code;
       } catch {
         /* body was not JSON — keep the status text */
+      }
+      if (res.status === 401 && code === 'auth_required') {
+        notifyAuthExpired();
       }
       onEvent({ type: 'error', message, code });
       return { ok: false, status: res.status, error: message };

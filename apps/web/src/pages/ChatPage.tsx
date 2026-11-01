@@ -61,11 +61,13 @@ export function ChatPage() {
   }, [loadProjects, loadConversations]);
 
   const list = messages ?? [];
+  const streamHere = !streaming.conversationId || streaming.conversationId === activeId;
   const showStreaming =
-    streaming.active ||
-    streaming.error !== null ||
-    (streaming.text.length > 0 && streaming.messageId !== null) ||
-    (streaming.reasoning.length > 0 && streaming.messageId !== null);
+    streamHere &&
+    (streaming.active ||
+      streaming.error !== null ||
+      (streaming.text.length > 0 && streaming.messageId !== null) ||
+      (streaming.reasoning.length > 0 && streaming.messageId !== null));
 
   const { ref, atBottom, onScroll, scrollToBottom } = useStickToBottom<HTMLDivElement>([
     list.length,

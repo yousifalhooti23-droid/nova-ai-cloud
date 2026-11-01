@@ -18,8 +18,6 @@ import { ScopedStore } from './storage/scoped-store.js';
 
 const PUBLIC_AUTH_PATHS = new Set([
   '/api/health',
-  '/api/models',
-  '/api/models/workers-ai-probe',
   '/api/auth/config',
   '/api/auth/me',
   '/api/auth/login',
@@ -79,10 +77,25 @@ export function createApp(deps: AppDeps) {
     // Per-user session authentication & strict multi-tenant Store isolation.
     if (isApi) {
       const bearerToken = c.req.header('authorization')?.replace(/^Bearer\s+/i, '').trim();
-      const mediaToken = isUploadRead
-        ? parseCookieHeader(c.req.header('cookie'), 'nova_media') ?? c.req.query('token')
-        : undefined;
-      const candidateToken = bearerToken || mediaToken;
+      const isSafeMethod = c.req.method === 'GET' || c.req.method === 'HEAD';
+      const reqOrigin = c.req.header('origin');
+      const reqHost = c.req.header('host');
+      let sameOriginWrite = false;
+      if (reqOrigin && reqHost) {
+        try {
+          sameOriginWrite = new URL(reqOrigin).host.toLowerCase() === reqHost.toLowerCase();
+        } catch {
+          sameOriginWrite = false;
+        }
+      }
+      // First-party HttpOnly SameSite=Strict cookie fallback for mobile browsers
+      // (Brave Shields / iOS Private Browsing) where localStorage is blocked.
+      const cookieToken =
+        isSafeMethod || sameOriginWrite
+          ? parseCookieHeader(c.req.header('cookie'), 'nova_media')
+          : undefined;
+      const queryMediaToken = isUploadRead ? c.req.query('token') : undefined;
+      const candidateToken = bearerToken || cookieToken || queryMediaToken;
       const authHit = candidateToken ? await deps.auth.authenticateToken(candidateToken) : null;
 
       if (authHit) {

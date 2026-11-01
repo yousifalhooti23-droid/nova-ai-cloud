@@ -24,39 +24,98 @@ import { Endpoints } from '@nova/shared';
 const ACCESS_TOKEN_KEY = 'nova.access.token';
 const SESSION_TOKEN_KEY = 'nova.session.token';
 
+/**
+ * In-memory token mirrors guarantee authentication keeps working on mobile
+ * browsers where WebKit Private Browsing or Brave Shields ("Block All Cookies")
+ * throw SecurityError/QuotaExceededError on localStorage writes.
+ */
+let memoryAccessToken = '';
+let memorySessionToken = '';
+let authExpiredHandler: (() => void) | null = null;
+
+export function setAuthExpiredHandler(fn: (() => void) | null) {
+  authExpiredHandler = fn;
+}
+
+export function notifyAuthExpired() {
+  authExpiredHandler?.();
+}
+
 export function getStoredAccessToken(): string {
-  try {
-    return localStorage.getItem(ACCESS_TOKEN_KEY) ?? '';
-  } catch {
-    return '';
+  if (memoryAccessToken) return memoryAccessToken;
+  for (const store of [safeLocalStorage(), safeSessionStorage()]) {
+    if (!store) continue;
+    try {
+      const val = store.getItem(ACCESS_TOKEN_KEY) ?? '';
+      if (val) {
+        memoryAccessToken = val;
+        return val;
+      }
+    } catch {
+      /* ignore storage errors */
+    }
   }
+  return '';
 }
 
 export function setStoredAccessToken(token: string) {
-  try {
-    const clean = token.trim();
-    if (clean) localStorage.setItem(ACCESS_TOKEN_KEY, clean);
-    else localStorage.removeItem(ACCESS_TOKEN_KEY);
-  } catch {
-    /* ignore storage errors */
+  const clean = token.trim();
+  memoryAccessToken = clean;
+  for (const store of [safeLocalStorage(), safeSessionStorage()]) {
+    if (!store) continue;
+    try {
+      if (clean) store.setItem(ACCESS_TOKEN_KEY, clean);
+      else store.removeItem(ACCESS_TOKEN_KEY);
+    } catch {
+      /* ignore storage errors */
+    }
   }
 }
 
 export function getStoredSessionToken(): string {
-  try {
-    return localStorage.getItem(SESSION_TOKEN_KEY) ?? '';
-  } catch {
-    return '';
+  if (memorySessionToken) return memorySessionToken;
+  for (const store of [safeLocalStorage(), safeSessionStorage()]) {
+    if (!store) continue;
+    try {
+      const val = store.getItem(SESSION_TOKEN_KEY) ?? '';
+      if (val) {
+        memorySessionToken = val;
+        return val;
+      }
+    } catch {
+      /* ignore storage errors */
+    }
   }
+  return '';
 }
 
 export function setStoredSessionToken(token: string) {
+  const clean = token.trim();
+  memorySessionToken = clean;
+  for (const store of [safeLocalStorage(), safeSessionStorage()]) {
+    if (!store) continue;
+    try {
+      if (clean) store.setItem(SESSION_TOKEN_KEY, clean);
+      else store.removeItem(SESSION_TOKEN_KEY);
+    } catch {
+      /* ignore storage errors */
+    }
+  }
+}
+
+function safeLocalStorage(): Storage | null {
   try {
-    const clean = token.trim();
-    if (clean) localStorage.setItem(SESSION_TOKEN_KEY, clean);
-    else localStorage.removeItem(SESSION_TOKEN_KEY);
+    return typeof localStorage !== 'undefined' ? localStorage : null;
   } catch {
-    /* ignore storage errors */
+    return null;
+  }
+}
+
+function safeSessionStorage(): Storage | null {
+  try {
+    return typeof sessionStorage !== 'undefined' ? sessionStorage : null;
+  } catch {
+    return null;
   }
 }
 
@@ -95,7 +154,7 @@ export class ApiRequestError extends Error {
 async function http<T>(path: string, init?: RequestInit): Promise<T> {
   let res: Response;
   try {
-    res = await fetch(path, { ...init, headers: authHeaders(init?.headers) });
+    res = await fetch(path, { credentials: 'same-origin', ...init, headers: authHeaders(init?.headers) });
   } catch (err) {
     throw new ApiRequestError(0, {
       error: 'network',
@@ -106,7 +165,13 @@ async function http<T>(path: string, init?: RequestInit): Promise<T> {
   if (res.status === 204) return undefined as T;
   const text = await res.text();
   const body = text ? safeJson(text) : {};
-  if (!res.ok) throw new ApiRequestError(res.status, body as Record<string, unknown> as never);
+  if (!res.ok) {
+    const errObj = body as Record<string, unknown>;
+    if (res.status === 401 && errObj?.code === 'auth_required' && !path.startsWith('/api/auth/')) {
+      notifyAuthExpired();
+    }
+    throw new ApiRequestError(res.status, errObj as never);
+  }
   return body as T;
 }
 

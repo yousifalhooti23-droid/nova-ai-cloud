@@ -24,7 +24,7 @@ function resolveClientIp(c: { req: { header(name: string): string | undefined } 
 function buildMediaCookie(token: string, isHttps: boolean, maxAgeSec = 30 * 24 * 60 * 60): string {
   const parts = [
     `nova_media=${encodeURIComponent(token)}`,
-    'Path=/api/uploads',
+    'Path=/api',
     `Max-Age=${maxAgeSec}`,
     'HttpOnly',
     'SameSite=Strict',
