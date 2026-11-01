@@ -13,7 +13,7 @@ import { IconButton, Spinner } from '@/components/ui';
 const MAX_UPLOAD = 25 * 1024 * 1024;
 
 export function Composer({ projectId, onNeedProject }: { projectId?: string | null; onNeedProject?: () => void }) {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const composer = useChatStore((s) => s.composer);
   const setComposer = useChatStore((s) => s.setComposer);
   const send = useChatStore((s) => s.send);
@@ -115,6 +115,28 @@ export function Composer({ projectId, onNeedProject }: { projectId?: string | nu
               </button>
             );
           })}
+
+          {/* Manual Web Search Toggle */}
+          <button
+            type="button"
+            onClick={() => {
+              setComposer({ webSearch: !composer.webSearch });
+              taRef.current?.focus();
+            }}
+            title={locale === 'ar' ? 'تفعيل البحث الحي في الويب للوصول لأحدث معلومات وتحديثات اللحظة الحالية' : 'Toggle live web search grounding for real-time information'}
+            className={cn(
+              'ms-auto inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] sm:text-[11.5px] transition-all whitespace-nowrap',
+              composer.webSearch
+                ? 'border-sky-500/80 bg-sky-500/20 font-semibold text-sky-300 shadow-[0_0_12px_rgba(14,165,233,0.3)]'
+                : 'border-line bg-panel text-muted hover:border-line-strong hover:text-text',
+            )}
+          >
+            <Globe size={12} className={cn(composer.webSearch && 'text-sky-400')} />
+            <span>{locale === 'ar' ? 'بحث في الويب' : 'Web Search'}</span>
+            {composer.webSearch ? (
+              <span className="h-1.5 w-1.5 rounded-full bg-sky-400 animate-pulse" />
+            ) : null}
+          </button>
         </div>
 
         {/* Attachment previews (images, videos, text/code) */}

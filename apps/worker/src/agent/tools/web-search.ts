@@ -50,6 +50,31 @@ export async function performSafeWebSearch(query: string, limit = 5): Promise<Se
 
   const results: SearchResultItem[] = [];
 
+  // 0. DuckDuckGo Instant Answer API (Free official JSON endpoint)
+  try {
+    const iaUrl = `https://api.duckduckgo.com/?q=${encodeURIComponent(cleanQuery)}&format=json&no_html=1&skip_disambig=1`;
+    const ac0 = new AbortController();
+    const t0 = setTimeout(() => ac0.abort(), 3500);
+    try {
+      const iaResp = await fetch(iaUrl, { headers: { 'User-Agent': 'NOVA-AI-Cloud/0.4.9' }, signal: ac0.signal });
+      if (iaResp.ok) {
+        const data = (await iaResp.json()) as any;
+        if (data?.AbstractText && data?.AbstractURL && isSafeExternalUrl(data.AbstractURL)) {
+          results.push({
+            title: String(data.Heading || cleanQuery),
+            url: String(data.AbstractURL),
+            snippet: String(data.AbstractText),
+            source: String(data.AbstractSource || 'DuckDuckGo Instant Answer'),
+          });
+        }
+      }
+    } finally {
+      clearTimeout(t0);
+    }
+  } catch {
+    /* ignore instant answer error */
+  }
+
   // 1. DuckDuckGo Search
   try {
     const ddgUrl = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(cleanQuery)}`;
@@ -185,6 +210,50 @@ export async function performSafeGitHubSearch(query: string, limit = 5): Promise
     /* network timeout */
   }
   return [];
+}
+
+/**
+ * Fetches a public webpage using Jina Reader (https://r.jina.ai/<URL>),
+ * producing clean, high-fidelity markdown with headings, lists, and tables.
+ * Falls back to local HTML stripping if Jina Reader is unavailable.
+ */
+export async function performSafeJinaFetch(targetUrl: string, maxChars = 6000): Promise<{ title: string; content: string; url: string }> {
+  if (!isSafeExternalUrl(targetUrl)) {
+    throw new Error('Access denied: target URL is invalid, non-HTTP, or belongs to a restricted internal IP.');
+  }
+
+  try {
+    const jinaUrl = `https://r.jina.ai/${targetUrl}`;
+    const ac = new AbortController();
+    const timer = setTimeout(() => ac.abort(), 7500);
+    try {
+      const resp = await fetch(jinaUrl, {
+        headers: {
+          Accept: 'text/markdown,text/plain',
+          'User-Agent': 'NOVA-AI-Cloud/0.4.9',
+        },
+        signal: ac.signal,
+      });
+      if (resp.ok) {
+        const text = await resp.text();
+        if (text && text.length > 80 && !text.includes('Error: target URL is unreachable')) {
+          const titleMatch = text.match(/^Title:\s*(.+)$/m);
+          const title = titleMatch ? titleMatch[1].trim() : targetUrl;
+          return {
+            title,
+            url: targetUrl,
+            content: truncate(text, maxChars),
+          };
+        }
+      }
+    } finally {
+      clearTimeout(timer);
+    }
+  } catch {
+    /* gracefully fall through to local fallback */
+  }
+
+  return performSafeWebFetch(targetUrl, maxChars);
 }
 
 /**
@@ -341,7 +410,7 @@ export const webFetchTool: Tool = {
     if (!u.ok) return { ok: false, output: u.error };
 
     try {
-      const res = await performSafeWebFetch(u.value);
+      const res = await performSafeJinaFetch(u.value);
       return {
         ok: true,
         output: `Page Title: ${res.title}\nURL: ${res.url}\n\nContent:\n${res.content}`,

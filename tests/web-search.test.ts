@@ -60,6 +60,18 @@ describe('Safe Web & GitHub Search (Cloud Sandbox Isolation)', () => {
 
     const r6 = detectWebSearchIntent('مرحبا كيف حالك اليوم');
     expect(r6.isSearch).toBe(false);
+
+    // Auto-search router detects live queries (temporal, prices, news)
+    const r7 = detectWebSearchIntent('ما هو سعر الذهب اليوم؟');
+    expect(r7.isSearch).toBe(true);
+
+    const r8 = detectWebSearchIntent('what is the latest release of Next.js?');
+    expect(r8.isSearch).toBe(true);
+
+    // Force web search toggle overrides
+    const r9 = detectWebSearchIntent('عمان للتعدين', true);
+    expect(r9.isSearch).toBe(true);
+    expect(r9.query).toContain('عمان للتعدين');
   });
 
   it('exposes safe read-only tool descriptors', () => {

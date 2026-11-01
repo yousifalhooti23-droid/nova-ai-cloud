@@ -22,6 +22,7 @@ vi.mock('@/components/code/EditorPane', () => ({
 }));
 
 import App from '@/App';
+import { parseThinkingAndAnswer } from '@/components/chat/MessageBubble';
 import { useAppStore } from '@/store/app';
 import { emptyStreaming, useChatStore } from '@/store/chat';
 import { initialAgent, useCodeStore } from '@/store/code';
@@ -89,7 +90,7 @@ function resetStores() {
   useChatStore.setState({
     conversations: [], activeId: null, messages: {}, loadingList: false, loadingMessages: false,
     streaming: { ...emptyStreaming },
-    composer: { modelId: null, modelClass: 'chat', studioMode: 'chat', temperature: 0.7, systemPrompt: '', attachments: [], uploading: false },
+    composer: { modelId: null, modelClass: 'chat', studioMode: 'chat', webSearch: false, temperature: 0.7, systemPrompt: '', attachments: [], uploading: false },
     lastError: null,
   });
   useCodeStore.setState({
@@ -411,5 +412,30 @@ describe('NOVA web UI', () => {
     // Auto-closed style and added fallback body
     expect(srcDoc).toContain('</style>');
     expect(srcDoc).toContain('توقف التوليد عند حد الرموز');
+  });
+
+  it('parses Claude & DeepSeek <think>...</think> blocks cleanly for extended thinking UI', () => {
+    // 1. Closed think block
+    const p1 = parseThinkingAndAnswer('<think>\nAnalyzing the user query from first principles.\n</think>\nHere is the final answer.');
+    expect(p1.thinking).toContain('Analyzing the user query');
+    expect(p1.answer).toBe('Here is the final answer.');
+    expect(p1.isStillThinking).toBe(false);
+
+    // 2. Open / in-progress streaming think block
+    const p2 = parseThinkingAndAnswer('<think>\nModel is still actively reasoning...');
+    expect(p2.thinking).toContain('Model is still actively reasoning...');
+    expect(p2.answer).toBe('');
+    expect(p2.isStillThinking).toBe(true);
+
+    // 3. Regular answer without think tags
+    const p3 = parseThinkingAndAnswer('Just a regular response with no thinking tag.');
+    expect(p3.thinking).toBe('');
+    expect(p3.answer).toBe('Just a regular response with no thinking tag.');
+    expect(p3.isStillThinking).toBe(false);
+
+    // 4. Upstream reasoning delta integration
+    const p4 = parseThinkingAndAnswer('Final text', 'Upstream CoT reasoning trace');
+    expect(p4.thinking).toBe('Upstream CoT reasoning trace');
+    expect(p4.answer).toBe('Final text');
   });
 });

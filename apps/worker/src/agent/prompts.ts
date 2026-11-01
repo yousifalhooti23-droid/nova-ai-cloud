@@ -30,6 +30,43 @@ const WORKFLOW = `WORKFLOW
 5. Summarise: what changed, what still needs approval, what you could not verify.
 When you are done, answer with a short summary — do not call more tools.`;
 
+export function getTemporalContext(): string {
+  const now = new Date();
+  const daysAr = ['الأحد', 'الإثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'];
+  const daysEn = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  const dayNameEn = daysEn[now.getUTCDay()];
+  const dayNameAr = daysAr[now.getUTCDay()];
+  const dateStr = now.toISOString().slice(0, 10);
+  const timeUtc = now.toUTCString();
+
+  return [
+    'REAL-TIME TEMPORAL CONTEXT:',
+    `- Current Date & Day: ${dayNameEn} (${dayNameAr}), ${dateStr}`,
+    `- Current UTC Timestamp: ${timeUtc} (${now.toISOString()})`,
+    '- You are operating in the present moment with real-time temporal grounding.',
+    '- Whenever asked about today, the current year, recent events, or latest releases, always anchor your knowledge to this present date.',
+  ].join('\n');
+}
+
+export const CLAUDE_COGNITIVE_STYLE = [
+  'COGNITIVE STYLE & REASONING (Claude-Level Analytical Rigor):',
+  '- Tone: Warm, intellectually sharp, deeply analytical, articulate, and direct.',
+  '- First-Principles: Deconstruct complex problems into core axioms before synthesizing answers.',
+  '- Zero Generic AI Filler: Never start with "Certainly!", "Sure thing!", "I would be happy to help", "As an AI...". Begin immediately with substantial value.',
+  '- Production-Grade Code: Write clean, complete, battle-tested code without placeholders, ellipsis (...), or omitted error cases.',
+  '- Intellectual Honesty: Distinguish clearly between verified facts, historical context, and reasoned inference.',
+  '',
+  'EXTENDED THINKING PROTOCOL (<think>...</think>):',
+  'For complex, analytical, architectural, multi-step, coding inquiries, or questions referencing live web results:',
+  'You MUST articulate your preliminary internal deliberation inside a <think>...</think> block before generating the final answer.',
+  'Inside <think>:',
+  '1. Deconstruct the user\'s explicit and implicit goals, edge cases, and constraints.',
+  '2. Cross-reference real-time temporal context (current date) and live web search findings.',
+  '3. Weigh architectural trade-offs, potential pitfalls, and implementation alternatives.',
+  '4. Plan the optimal structure and flow of the final answer.',
+  'Close with </think>, and then output your final, refined, user-facing response.',
+].join('\n');
+
 export interface SystemPromptInput {
   project: Project | null;
   files: ProjectFile[];
@@ -50,6 +87,10 @@ export function buildAgentSystemPrompt(input: SystemPromptInput): string {
 
   const sections: string[] = [
     IDENTITY,
+    '',
+    getTemporalContext(),
+    '',
+    CLAUDE_COGNITIVE_STYLE,
     '',
     `PROJECT${project ? `: ${project.name}` : ''}`,
     project?.description ? `description: ${project.description}` : '',
@@ -96,6 +137,8 @@ export function buildChatSystemPrompt(opts: {
 } = {}): string {
   const parts = [
     'You are NOVA, a precise, senior-level AI assistant and creative cloud studio.',
+    getTemporalContext(),
+    CLAUDE_COGNITIVE_STYLE,
     'Answer in the language the user writes in (Arabic or English). Keep code, identifiers and commands in English.',
     'Use Markdown. Put every code sample in a fenced block with a language tag.',
     'Be concrete and correct. If you are unsure, say so — never invent APIs, file contents or command output.',

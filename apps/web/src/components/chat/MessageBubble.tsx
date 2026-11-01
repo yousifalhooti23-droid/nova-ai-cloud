@@ -1,6 +1,6 @@
-import { memo, useState } from 'react';
+import { memo, useMemo, useState } from 'react';
 import type { ChatMessage } from '@nova/shared';
-import { AlertTriangle, Bot, Check, Copy, KeyRound, Paperclip, RefreshCw, User, Wrench } from 'lucide-react';
+import { AlertTriangle, Bot, BrainCircuit, Check, ChevronDown, Copy, KeyRound, Paperclip, RefreshCw, User, Wrench } from 'lucide-react';
 import { useI18n } from '@/i18n';
 import { cn } from '@/lib/cn';
 import { formatNumber, prettyModelId, providerLabel, relativeTime } from '@/lib/format';
@@ -8,6 +8,91 @@ import { authMediaUrl, isImageMime, isVideoMime } from '@/lib/media';
 import { useAppStore } from '@/store/app';
 import { Markdown } from './Markdown';
 import { Badge, Button } from '@/components/ui';
+
+export interface ParsedContent {
+  thinking: string;
+  answer: string;
+  isStillThinking: boolean;
+}
+
+export function parseThinkingAndAnswer(raw: string, upstreamReasoning?: string): ParsedContent {
+  let combinedThinking = (upstreamReasoning || '').trim();
+  let cleanAnswer = raw || '';
+  let isStillThinking = false;
+
+  const thinkClosedMatch = cleanAnswer.match(/<think>([\s\S]*?)<\/think>/i);
+  if (thinkClosedMatch) {
+    const extracted = thinkClosedMatch[1].trim();
+    combinedThinking = combinedThinking ? `${combinedThinking}\n\n${extracted}` : extracted;
+    cleanAnswer = cleanAnswer.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+  } else {
+    const openIndex = cleanAnswer.search(/<think>/i);
+    if (openIndex !== -1) {
+      const extracted = cleanAnswer.slice(openIndex + 7).trim();
+      combinedThinking = combinedThinking ? `${combinedThinking}\n\n${extracted}` : extracted;
+      cleanAnswer = cleanAnswer.slice(0, openIndex).trim();
+      isStillThinking = true;
+    }
+  }
+
+  return {
+    thinking: combinedThinking,
+    answer: cleanAnswer,
+    isStillThinking,
+  };
+}
+
+function ThinkingAccordion({
+  thinking,
+  isStreaming,
+  isStillThinking,
+  locale,
+}: {
+  thinking: string;
+  isStreaming?: boolean;
+  isStillThinking?: boolean;
+  locale?: string;
+}) {
+  const [open, setOpen] = useState(Boolean(isStillThinking || isStreaming));
+  const isAr = locale === 'ar';
+
+  return (
+    <div className="mb-2.5 overflow-hidden rounded-xl border border-accent/25 bg-[#0b0e14]/90 shadow-sm transition-all">
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        className="flex w-full items-center justify-between px-3 py-1.5 text-start transition-colors hover:bg-surface/60"
+      >
+        <span className="inline-flex items-center gap-2 text-[11.5px] font-semibold text-accent">
+          <BrainCircuit size={13} className={cn('text-accent', isStillThinking && 'animate-pulse')} />
+          <span>{isAr ? 'يتأمل ويفكر...' : 'Thinking Process'}</span>
+          {isStillThinking ? (
+            <span className="flex items-center gap-1 text-[10.5px] font-normal text-dim">
+              <span className="pulse-dot h-1.5 w-1.5 rounded-full bg-accent" />
+              <span>{isAr ? 'قيد التحليل والتفكير...' : 'Reasoning...'}</span>
+            </span>
+          ) : (
+            <span className="text-[10px] font-normal text-dim">
+              ({isAr ? 'اكتمل التأمل' : 'Thought completed'})
+            </span>
+          )}
+        </span>
+        <ChevronDown size={12} className={cn('text-dim transition-transform duration-200', open && 'rotate-180')} />
+      </button>
+
+      {open ? (
+        <div className="border-t border-line/50 bg-surface/30 px-3 py-2 text-[11.5px] leading-relaxed text-muted border-dashed">
+          <div className="whitespace-pre-wrap font-mono text-[11px] text-slate-300/85 leading-relaxed max-h-[320px] overflow-y-auto pr-1">
+            {thinking}
+            {isStillThinking ? (
+              <span className="ms-1 inline-block h-3.5 w-1.5 translate-y-0.5 animate-pulse bg-accent" />
+            ) : null}
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
 
 interface Props {
   message: ChatMessage;
@@ -26,12 +111,17 @@ export const MessageBubble = memo(function MessageBubble({
   const [copied, setCopied] = useState(false);
   const isUser = message.role === 'user';
   const isTool = message.role === 'tool';
-  const body = isStreaming && streamingText !== undefined ? streamingText : message.content;
+  const rawBody = isStreaming && streamingText !== undefined ? streamingText : message.content;
+  const parsed = useMemo(
+    () => (isUser || isTool ? { thinking: '', answer: rawBody, isStillThinking: false } : parseThinkingAndAnswer(rawBody, reasoningText)),
+    [rawBody, reasoningText, isUser, isTool],
+  );
+  const body = parsed.answer;
   const failed = message.status === 'error';
 
   const copy = async () => {
     try {
-      await navigator.clipboard.writeText(body);
+      await navigator.clipboard.writeText(body || rawBody);
       setCopied(true);
       setTimeout(() => setCopied(false), 1400);
     } catch {
@@ -73,11 +163,13 @@ export const MessageBubble = memo(function MessageBubble({
             <ErrorMessageContent message={message} />
           ) : (
             <>
-              {reasoningText ? (
-                <details open={isStreaming ? true : undefined} className="mb-2 rounded-lg border border-line bg-surface/70 px-2.5 py-1.5">
-                  <summary className="cursor-pointer select-none text-[11px] text-dim">{t('agent.thought')}</summary>
-                  <p className="mt-1.5 whitespace-pre-wrap text-[12px] leading-relaxed text-muted">{reasoningText}</p>
-                </details>
+              {parsed.thinking ? (
+                <ThinkingAccordion
+                  thinking={parsed.thinking}
+                  isStreaming={isStreaming}
+                  isStillThinking={parsed.isStillThinking}
+                  locale={locale}
+                />
               ) : null}
               {body ? (
                 isUser ? (
@@ -85,10 +177,10 @@ export const MessageBubble = memo(function MessageBubble({
                 ) : (
                   <Markdown content={body} copyLabel={t('common.copy')} copiedLabel={t('common.copied')} isStreaming={isStreaming} />
                 )
-              ) : isStreaming ? (
-                <span className="inline-flex items-center gap-1 text-[12px] text-dim">
+              ) : isStreaming || parsed.isStillThinking ? (
+                <span className="inline-flex items-center gap-1.5 text-[12px] text-dim">
                   <span className="pulse-dot h-1.5 w-1.5 rounded-full bg-accent" />
-                  {t('chat.thinking')}
+                  {parsed.isStillThinking ? (locale === 'ar' ? 'يتأمل ويحلل الإجابة...' : 'Reasoning deeply...') : t('chat.thinking')}
                 </span>
               ) : (
                 <div className="flex flex-wrap items-center justify-between gap-2 py-0.5 text-[12.5px] text-muted">

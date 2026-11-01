@@ -209,6 +209,8 @@ export interface ChatRequest {
   enableTools?: boolean;
   /** Optional creative studio mode (image generation, multi-scene video, live website). */
   studioMode?: StudioMode;
+  /** Force live web search grounding (from manual toggle or intent router). */
+  webSearch?: boolean;
 }
 
 export interface StudioImageRequest {
