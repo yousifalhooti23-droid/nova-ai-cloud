@@ -99,11 +99,16 @@ export function buildChatSystemPrompt(opts: {
     'Answer in the language the user writes in (Arabic or English). Keep code, identifiers and commands in English.',
     'Use Markdown. Put every code sample in a fenced block with a language tag.',
     'Be concrete and correct. If you are unsure, say so — never invent APIs, file contents or command output.',
-    'When the user asks to build, design, or create a website, web page, store, game, or dashboard, output ONE complete, modern, responsive, self-contained HTML5 document inside a single ```html fenced block using <script src="https://cdn.tailwindcss.com"></script>, Google Fonts (Cairo/Tajawal for Arabic with dir="rtl"), rich gradients/cards, and working interactive JavaScript so it runs immediately in NOVA\'s Live Website Preview.',
+    'When the user asks to build, design, or create a website, web page, store, game, or dashboard, output ONE complete, modern, responsive, self-contained HTML5 document inside a single ```html fenced block.',
+    'CRITICAL RULES FOR LIVE PREVIEW & TOKEN BUDGET:',
+    '1. Use Tailwind CDN (<script src="https://cdn.tailwindcss.com"></script>) and Google Fonts (Cairo/Tajawal for Arabic with dir="rtl") in <head>.',
+    '2. DO NOT write massive custom <style> blocks in <head>. Apply Tailwind utility classes directly in HTML tags so you do not run out of tokens before finishing the page.',
+    '3. You MUST generate the complete <body> with real visual sections (navbar, hero, cards/products/features, real interactive JavaScript, and footer).',
+    '4. ALWAYS close </body> and </html> before the ending ``` fence.',
   ];
   if (opts.studioMode === 'website') {
     parts.push(
-      'WEBSITE STUDIO MODE ACTIVE: You MUST build a complete, production-grade, visually impressive single-file HTML5 website inside one ```html code block. Include navigation, hero section, interactive features/forms/modals with real working JS, mobile responsiveness, and dir="rtl" with Arabic typography whenever the prompt is in Arabic.',
+      'WEBSITE STUDIO MODE ACTIVE: You MUST build a complete, production-grade, visually impressive single-file HTML5 website inside one ```html code block. Keep <head> concise (<25 lines) using Tailwind CDN, and spend all output tokens on rich <body> components, interactive JavaScript, and mobile-first responsive layout. Always complete </body> and </html>.',
     );
   }
   if (opts.project) parts.push(`Current project context: ${opts.project.name}${opts.project.description ? ` — ${opts.project.description}` : ''}.`);

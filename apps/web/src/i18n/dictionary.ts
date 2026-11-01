@@ -357,6 +357,9 @@ export const English = {
   'studio.exportingVideo': 'Recording video…',
   'studio.extractingFrames': 'Analyzing video frames…',
   'studio.dropHint': 'Drop images, videos, or code files here',
+  'studio.reloadPreview': 'Reload preview',
+  'studio.truncatedAlert': 'Generation stopped before finishing the body elements.',
+  'studio.continueBtn': 'Continue Generating Body',
 } as const;
 
 export type TranslationKey = keyof typeof English;
@@ -714,4 +717,7 @@ export const Arabic: Record<TranslationKey, string> = {
   'studio.exportingVideo': 'جارٍ تجهيز ملف الفيديو…',
   'studio.extractingFrames': 'جارٍ استخراج لقطات الفيديو للفهم البصري…',
   'studio.dropHint': 'أفلت الصور أو الفيديوهات أو الملفات هنا',
+  'studio.reloadPreview': 'إعادة تحميل المعاينة',
+  'studio.truncatedAlert': 'توقف التوليد عند حد الرموز قبل إكمال عناصر الصفحة.',
+  'studio.continueBtn': 'استكمال كتابة كود الموقع',
 };

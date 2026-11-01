@@ -375,4 +375,41 @@ describe('NOVA web UI', () => {
     expect(iframe).toBeTruthy();
     expect(iframe.getAttribute('srcdoc')).toContain('قهوة نوفا');
   });
+
+  it('safely repairs truncated HTML that ended before body was generated and renders a helpful status instead of blank white', async () => {
+    const truncatedHtml = '```html\n<!DOCTYPE html><html lang="ar" dir="rtl"><head><title>متجر تراث</title><style>.banner { background: #000;';
+    api = installApiMock({
+      ...defaultRoutes(),
+      'GET /api/conversations': () => ({ conversations: [fx.conversation] }),
+      'GET /api/conversations/:id/messages': () => ({
+        messages: [
+          {
+            id: 'msg_trunc_1',
+            conversationId: fx.conversation.id,
+            role: 'assistant',
+            content: truncatedHtml,
+            status: 'complete',
+            modelId: 'workers-ai:qwen3.8-27b',
+            createdAt: '2026-10-30T10:00:00.000Z',
+          },
+        ],
+      }),
+    });
+
+    render(<App />);
+    const convBtn = await screen.findByText(fx.conversation.title);
+    await userEvent.click(convBtn);
+
+    expect(await screen.findByText('معاينة حية للموقع')).toBeTruthy();
+    // Warning banner is rendered
+    expect(await screen.findByText('توقف التوليد عند حد الرموز قبل إكمال عناصر الصفحة.')).toBeTruthy();
+    expect(await screen.findByText('استكمال كتابة كود الموقع')).toBeTruthy();
+
+    const iframe = screen.getByTitle('NOVA Live Website Preview') as HTMLIFrameElement;
+    expect(iframe).toBeTruthy();
+    const srcDoc = iframe.getAttribute('srcdoc') || '';
+    // Auto-closed style and added fallback body
+    expect(srcDoc).toContain('</style>');
+    expect(srcDoc).toContain('توقف التوليد عند حد الرموز');
+  });
 });

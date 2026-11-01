@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { StudioVideoScene } from '@nova/shared';
 import {
-  Code2, Download, Eye, FolderPlus, Globe, Maximize2, Monitor, Pause, Play,
+  AlertTriangle, Code2, Download, Eye, FolderPlus, Globe, Maximize2, Monitor, Pause, Play,
   RotateCcw, Smartphone, Volume2, VolumeX, X,
 } from 'lucide-react';
 import { useI18n } from '@/i18n';
@@ -9,6 +9,7 @@ import { api } from '@/lib/api';
 import { cn } from '@/lib/cn';
 import { authMediaUrl } from '@/lib/media';
 import { useAppStore } from '@/store/app';
+import { useChatStore } from '@/store/chat';
 import { useCodeStore } from '@/store/code';
 
 export function isPreviewableWebsite(lang: string | undefined, code: string): boolean {
@@ -17,6 +18,117 @@ export function isPreviewableWebsite(lang: string | undefined, code: string): bo
   const trimmed = code.trim();
   if (trimmed.length < 90) return false;
   return /<!doctype\s+html|<html[\s>]|<body[\s>]|cdn\.tailwindcss\.com|<section[\s>]|<main[\s>]/i.test(trimmed);
+}
+
+export interface PreparedWebsite {
+  html: string;
+  isTruncated: boolean;
+  hasBody: boolean;
+  title: string;
+}
+
+/**
+ * Robust HTML sanitizer, storage polyfill injector, and auto-repairer.
+ * Solves:
+ *   1. Unclosed markdown fences or tags when token limits are reached mid-stream.
+ *   2. Crashes from `window.localStorage` / `window.sessionStorage` inside opaque sandboxed iframes.
+ *   3. Missing <body> elements so users never see a blank white canvas without explanation.
+ */
+export function prepareWebsiteHtml(rawCode: string): PreparedWebsite {
+  let clean = rawCode.trim();
+
+  // 1. Strip residual markdown fences if present
+  clean = clean.replace(/^```(?:html)?\s*/i, '').replace(/\s*```$/i, '').trim();
+
+  // 2. Extract title if present
+  const titleMatch = clean.match(/<title[^>]*>([^<]+)<\/title>/i);
+  const title = (titleMatch?.[1]?.trim() || 'NOVA Live Website Preview').slice(0, 50);
+
+  // 3. Inspect tag balance
+  const openStyles = (clean.match(/<style[\s>]/gi) || []).length;
+  const closeStyles = (clean.match(/<\/style>/gi) || []).length;
+  const unclosedStyle = openStyles > closeStyles;
+
+  const openScripts = (clean.match(/<script[\s>]/gi) || []).length;
+  const closeScripts = (clean.match(/<\/script>/gi) || []).length;
+  const unclosedScript = openScripts > closeScripts;
+
+  const hasBodyOpen = /<body[\s>]/i.test(clean);
+  const hasBodyClose = /<\/body>/i.test(clean);
+  const hasHtmlClose = /<\/html>/i.test(clean);
+
+  const isTruncated = unclosedStyle || unclosedScript || (hasBodyOpen && !hasBodyClose) || !hasBodyOpen;
+
+  // 4. Auto-repair open tags
+  if (unclosedStyle) {
+    clean += '\n</style>';
+  }
+  if (unclosedScript) {
+    clean += '\n</script>';
+  }
+
+  // 5. Shim localStorage & sessionStorage so sandboxed scripts don't crash on opaque origin
+  const storageShim = `<script>
+(function() {
+  try { window.localStorage.getItem('_t'); } catch(e) {
+    var mem = {};
+    window.localStorage = {
+      getItem: function(k) { return Object.prototype.hasOwnProperty.call(mem, k) ? mem[k] : null; },
+      setItem: function(k, v) { mem[k] = String(v); },
+      removeItem: function(k) { delete mem[k]; },
+      clear: function() { mem = {}; },
+      key: function(i) { return Object.keys(mem)[i] || null; },
+      get length() { return Object.keys(mem).length; }
+    };
+    window.sessionStorage = Object.assign({}, window.localStorage);
+  }
+})();
+</script>`;
+
+  // Base typography & smooth rendering fallback
+  const baseFallbackStyle = `<style>
+  html { color-scheme: light dark; }
+  body { margin: 0; min-height: 100vh; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Cairo", "Tajawal", sans-serif; }
+</style>`;
+
+  // 6. Handle truncated code that ended before <body> was rendered
+  if (!hasBodyOpen) {
+    if (/<head[\s>]/i.test(clean) && !/<\/head>/i.test(clean)) {
+      clean += '\n</head>';
+    }
+    clean += `
+<body class="bg-[#0b0e14] text-slate-100 min-h-screen flex items-center justify-center p-4" dir="rtl" style="font-family: system-ui, -apple-system, 'Cairo', 'Tajawal', sans-serif;">
+  <div style="max-width: 500px; width: 100%; background: #141821; border: 1px solid rgba(200, 150, 62, 0.4); border-radius: 16px; padding: 24px; text-align: center; box-shadow: 0 16px 36px rgba(0,0,0,0.5);">
+    <div style="font-size: 28px; margin-bottom: 10px;">⚠️</div>
+    <h3 style="font-size: 16px; font-weight: 700; color: #f1f5f9; margin-bottom: 8px;">توقف التوليد عند حد الرموز قبل كتابة محتوى الصفحة</h3>
+    <p style="font-size: 13px; line-height: 1.6; color: #94a3b8; margin-bottom: 16px;">
+      قام النموذج بتوليد إعدادات وتنسيقات الموقع في الترويسة، لكنه استهلك الحد الأقصى للمخرجات قبل كتابة عناصر <code>&lt;body&gt;</code>.
+    </p>
+    <div style="background: #0d1017; border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; padding: 12px; text-align: right; font-size: 12px; color: #cbd5e1;">
+      <span style="color: #eab308; font-weight: 600;">💡 الحل السريع:</span>
+      <div style="margin-top: 4px;">انقر على زر <strong>"استكمال كتابة كود الموقع"</strong> في الأعلى أو اكتب في المحادثة أدناه لمتابعة كتابة عناصر الصفحة.</div>
+    </div>
+  </div>
+</body>
+</html>`;
+  } else {
+    if (!hasBodyClose) clean += '\n</body>';
+    if (!hasHtmlClose) clean += '\n</html>';
+  }
+
+  // Inject storage shim & fallback styles
+  if (/<head[\s>]/i.test(clean)) {
+    clean = clean.replace(/<head[\s>]/i, (match) => `${match}\n${storageShim}\n${baseFallbackStyle}`);
+  } else {
+    clean = `${storageShim}\n${baseFallbackStyle}\n${clean}`;
+  }
+
+  return {
+    html: clean,
+    isTruncated,
+    hasBody: hasBodyOpen,
+    title,
+  };
 }
 
 /**
@@ -36,14 +148,18 @@ export function WebsitePreviewCard({
   const setView = useAppStore((s) => s.setView);
   const selectProject = useCodeStore((s) => s.selectProject);
   const loadProjects = useCodeStore((s) => s.loadProjects);
+  const send = useChatStore((s) => s.send);
 
   const [tab, setTab] = useState<'preview' | 'code'>('preview');
   const [viewport, setViewport] = useState<'desktop' | 'mobile'>('desktop');
   const [fullscreen, setFullscreen] = useState(false);
   const [savingProject, setSavingProject] = useState(false);
+  const [previewKey, setPreviewKey] = useState(0);
+
+  const prep = useMemo(() => prepareWebsiteHtml(code), [code]);
 
   const downloadHtml = () => {
-    const blob = new Blob([code], { type: 'text/html;charset=utf-8' });
+    const blob = new Blob([prep.html], { type: 'text/html;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
@@ -57,13 +173,12 @@ export function WebsitePreviewCard({
   const saveAsProject = async () => {
     setSavingProject(true);
     try {
-      const titleMatch = code.match(/<title[^>]*>([^<]+)<\/title>/i);
-      const name = (titleMatch?.[1]?.trim() || `nova-site-${Date.now().toString(36).slice(-4)}`).slice(0, 40);
+      const name = (prep.title || `nova-site-${Date.now().toString(36).slice(-4)}`).slice(0, 40);
       const { project } = await api.createProject({
         name,
         description: 'Generated in NOVA Website Studio',
         language: 'html',
-        files: { 'index.html': code },
+        files: { 'index.html': prep.html },
       });
       await loadProjects();
       await selectProject(project.id);
@@ -74,6 +189,10 @@ export function WebsitePreviewCard({
     } finally {
       setSavingProject(false);
     }
+  };
+
+  const handleContinue = () => {
+    void send('أكمل كتابة كود الموقع واكتب عناصر body مباشرة بتنسيق Tailwind مع إغلاق </body></html>');
   };
 
   return (
@@ -131,6 +250,16 @@ export function WebsitePreviewCard({
         ) : null}
 
         <div className="ms-auto flex items-center gap-1">
+          {tab === 'preview' ? (
+            <button
+              type="button"
+              onClick={() => setPreviewKey((k) => k + 1)}
+              className="inline-flex items-center gap-1 rounded-md border border-line bg-elevated px-2 py-1 text-[11px] text-muted transition-colors hover:text-text"
+              title={t('studio.reloadPreview')}
+            >
+              <RotateCcw size={11} />
+            </button>
+          ) : null}
           <button
             type="button"
             onClick={downloadHtml}
@@ -160,13 +289,30 @@ export function WebsitePreviewCard({
       </div>
 
       {tab === 'preview' ? (
-        <div className="flex justify-center bg-[#141821] p-2">
+        <div className="flex flex-col items-center bg-[#141821] p-2">
+          {prep.isTruncated && !prep.hasBody ? (
+            <div className="mb-2 flex w-full flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-[12px] text-amber-200">
+              <span className="flex items-center gap-1.5 font-medium">
+                <AlertTriangle size={14} className="shrink-0 text-amber-400" />
+                {t('studio.truncatedAlert')}
+              </span>
+              <button
+                type="button"
+                onClick={handleContinue}
+                className="inline-flex shrink-0 items-center gap-1 rounded-md bg-amber-500/25 px-2.5 py-1 text-[11.5px] font-semibold text-amber-100 hover:bg-amber-500/40 transition-colors"
+              >
+                {t('studio.continueBtn')}
+              </button>
+            </div>
+          ) : null}
+
           <iframe
+            key={previewKey}
             title="NOVA Live Website Preview"
-            srcDoc={code}
-            sandbox="allow-scripts allow-forms allow-modals"
+            srcDoc={prep.html}
+            sandbox="allow-scripts allow-forms allow-modals allow-popups"
             className={cn(
-              'h-[440px] rounded-lg border border-line bg-white transition-all',
+              'h-[460px] rounded-lg border border-line bg-[#0d1117] transition-all',
               viewport === 'mobile' ? 'w-[390px] max-w-full shadow-2xl' : 'w-full',
             )}
           />
@@ -183,6 +329,14 @@ export function WebsitePreviewCard({
               {t('studio.websiteTitle')}
             </span>
             <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setPreviewKey((k) => k + 1)}
+                className="btn btn-outline !py-1 text-[12px]"
+                title={t('studio.reloadPreview')}
+              >
+                <RotateCcw size={13} />
+              </button>
               <button
                 type="button"
                 onClick={downloadHtml}
@@ -202,10 +356,11 @@ export function WebsitePreviewCard({
             </div>
           </div>
           <iframe
+            key={`fs-${previewKey}`}
             title="NOVA Fullscreen Website Preview"
-            srcDoc={code}
-            sandbox="allow-scripts allow-forms allow-modals"
-            className="min-h-0 flex-1 w-full rounded-xl border border-line bg-white"
+            srcDoc={prep.html}
+            sandbox="allow-scripts allow-forms allow-modals allow-popups"
+            className="min-h-0 flex-1 w-full rounded-xl border border-line bg-[#0d1117]"
           />
         </div>
       ) : null}

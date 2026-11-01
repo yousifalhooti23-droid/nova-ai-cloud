@@ -225,7 +225,7 @@ export function registerChatRoutes(app: Hono<AppEnv>) {
             messages,
             stream: true,
             temperature: req.temperature,
-            maxTokens: req.maxTokens ?? (studioIntent === 'website' ? 4096 : undefined),
+            maxTokens: req.maxTokens ?? (studioIntent === 'website' ? 8192 : undefined),
             signal,
           },
           {
