@@ -57,7 +57,13 @@ export function prepareWebsiteHtml(rawCode: string): PreparedWebsite {
   const hasBodyClose = /<\/body>/i.test(clean);
   const hasHtmlClose = /<\/html>/i.test(clean);
 
-  const isTruncated = unclosedStyle || unclosedScript || (hasBodyOpen && !hasBodyClose) || !hasBodyOpen;
+  // Check if body has real substantial content (not just an empty body tag)
+  const bodyContentMatch = clean.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
+  const rawBodyInner = bodyContentMatch ? bodyContentMatch[1] : (hasBodyOpen ? clean.slice(clean.search(/<body[\s>]/i)) : '');
+  const strippedText = rawBodyInner.replace(/<script[\s\S]*?<\/script>/gi, '').replace(/<style[\s\S]*?<\/style>/gi, '').replace(/<[^>]+>/g, '').trim();
+  const hasSubstantialBody = strippedText.length >= 10 || /<(?:img|svg|canvas|video|button|input|form|section|article|nav|header|footer|h1|h2|h3|p)/i.test(rawBodyInner);
+
+  const isTruncated = unclosedStyle || unclosedScript || (hasBodyOpen && !hasBodyClose) || !hasBodyOpen || !hasSubstantialBody;
 
   // 4. Auto-repair open tags
   if (unclosedStyle) {
@@ -87,6 +93,16 @@ export function prepareWebsiteHtml(rawCode: string): PreparedWebsite {
   try { window.sessionStorage.getItem('_t'); } catch(e) {
     try { Object.defineProperty(window, 'sessionStorage', { value: makeMock(), configurable: true, writable: true }); } catch(_) {}
   }
+  window.addEventListener('error', function(e) {
+    var errEl = document.getElementById('nova-script-err');
+    if (!errEl && document.body) {
+      errEl = document.createElement('div');
+      errEl.id = 'nova-script-err';
+      errEl.style.cssText = 'position:fixed;bottom:10px;left:10px;right:10px;background:#1e1418;border:1px solid rgba(239,68,68,0.5);color:#fca5a5;padding:8px 12px;border-radius:8px;font-size:11.5px;font-family:sans-serif;z-index:99999;box-shadow:0 8px 24px rgba(0,0,0,0.5);display:flex;align-items:center;gap:8px;';
+      errEl.innerHTML = '<span style="color:#ef4444;font-size:14px;">⚠️</span><span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">تنبيه كود الموقع: ' + (e.message || 'Error') + '</span>';
+      document.body.appendChild(errEl);
+    }
+  });
 })();
 </script>`;
 
@@ -114,33 +130,39 @@ export function prepareWebsiteHtml(rawCode: string): PreparedWebsite {
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Cairo", "Tajawal", sans-serif;
   }
   /* Animation safety: if AOS, GSAP, or Wow.js fails to initialize, elements must not stay stuck at opacity:0 */
-  [data-aos], .fade-in, .animate-fade {
+  [data-aos], .fade-in, .animate-fade, .opacity-0 {
     opacity: 1 !important;
     visibility: visible !important;
     transform: none !important;
   }
 </style>`;
 
-  // 6. Handle truncated code that ended before <body> was rendered
-  if (!hasBodyOpen) {
+  // 6. Handle truncated code that ended before <body> or before substantial content
+  if (!hasBodyOpen || !hasSubstantialBody) {
     if (/<head[\s>]/i.test(clean) && !/<\/head>/i.test(clean)) {
       clean += '\n</head>';
     }
-    clean += `
+    const truncatedNotice = `
 <body class="bg-[#0b0e14] text-slate-100 min-h-screen flex items-center justify-center p-4" dir="rtl" style="font-family: system-ui, -apple-system, 'Cairo', 'Tajawal', sans-serif;">
-  <div style="max-width: 500px; width: 100%; background: #141821; border: 1px solid rgba(200, 150, 62, 0.4); border-radius: 16px; padding: 24px; text-align: center; box-shadow: 0 16px 36px rgba(0,0,0,0.5);">
-    <div style="font-size: 28px; margin-bottom: 10px;">⚠️</div>
-    <h3 style="font-size: 16px; font-weight: 700; color: #f1f5f9; margin-bottom: 8px;">توقف التوليد عند حد الرموز قبل كتابة محتوى الصفحة</h3>
+  <div style="max-width: 520px; width: 100%; background: #141821; border: 1px solid rgba(200, 150, 62, 0.4); border-radius: 16px; padding: 24px; text-align: center; box-shadow: 0 16px 36px rgba(0,0,0,0.5);">
+    <div style="font-size: 32px; margin-bottom: 12px;">🎨</div>
+    <h3 style="font-size: 16px; font-weight: 700; color: #f1f5f9; margin-bottom: 8px;">كود الموقع قيد الإنشاء أو توقف قبل عناصر الصفحة</h3>
     <p style="font-size: 13px; line-height: 1.6; color: #94a3b8; margin-bottom: 16px;">
-      قام النموذج بتوليد إعدادات وتنسيقات الموقع في الترويسة، لكنه استهلك الحد الأقصى للمخرجات قبل كتابة عناصر <code>&lt;body&gt;</code>.
+      قام النموذج بكتابة إعدادات الترويسة (${hasBodyOpen ? 'وتوقف التوليد عند حد الرموز قبل اكتمال عناصر الصفحة' : 'وتوقف التوليد عند حد الرموز قبل كتابة وسوم <body>'}).
     </p>
     <div style="background: #0d1017; border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; padding: 12px; text-align: right; font-size: 12px; color: #cbd5e1;">
       <span style="color: #eab308; font-weight: 600;">💡 الحل السريع:</span>
-      <div style="margin-top: 4px;">انقر على زر <strong>"استكمال كتابة كود الموقع"</strong> في الأعلى أو اكتب في المحادثة أدناه لمتابعة كتابة عناصر الصفحة.</div>
+      <div style="margin-top: 4px;">انقر على زر <strong>"استكمال كتابة كود الموقع"</strong> في الأعلى أو أرسل كلمة "أكمل" في المحادثة لمتابعة كتابة عناصر الصفحة.</div>
     </div>
   </div>
 </body>
 </html>`;
+    if (!hasBodyOpen) {
+      clean += truncatedNotice;
+    } else {
+      // Replace empty body with informative notice so user never sees a blank white square
+      clean = clean.replace(/<body[^>]*>[\s\S]*$/i, truncatedNotice);
+    }
   } else {
     if (!hasBodyClose) clean += '\n</body>';
     if (!hasHtmlClose) clean += '\n</html>';
@@ -321,7 +343,7 @@ export function WebsitePreviewCard({
 
       {tab === 'preview' ? (
         <div className="flex flex-col items-center bg-[#141821] p-2">
-          {prep.isTruncated && !prep.hasBody ? (
+          {prep.isTruncated ? (
             <div className="mb-2 flex w-full flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-[12px] text-amber-200">
               <span className="flex items-center gap-1.5 font-medium">
                 <AlertTriangle size={14} className="shrink-0 text-amber-400" />

@@ -1,10 +1,24 @@
 import { memo, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import DOMPurify from 'dompurify';
 import { Check, Copy } from 'lucide-react';
 import { highlight, normalizeLang } from './Highlight';
 import { AiVideoPlayer, GeneratedImageCard, isPreviewableWebsite, WebsitePreviewCard } from './StudioWidgets';
 import { cn } from '@/lib/cn';
+
+/**
+ * Strict XSS sanitization for Markdown links and media.
+ * Blocks javascript:, vbscript:, malicious data URIs, and file: protocols.
+ */
+export function isSafeMarkdownUrl(rawUrl?: string): boolean {
+  if (!rawUrl) return false;
+  const trimmed = rawUrl.trim();
+  if (/^(?:javascript|vbscript|data(?!:image\/(?:png|jpe?g|webp|gif|svg\+xml))|file):/i.test(trimmed)) {
+    return false;
+  }
+  return true;
+}
 
 interface Props {
   content: string;
@@ -65,11 +79,14 @@ export const Markdown = memo(function Markdown({ content, copyLabel, copiedLabel
             return <>{children}</>;
           },
           img({ src, alt }) {
-            return <GeneratedImageCard src={src} alt={alt} />;
+            const safeSrc = isSafeMarkdownUrl(src) ? src : undefined;
+            if (!safeSrc) return null;
+            return <GeneratedImageCard src={safeSrc} alt={alt ? DOMPurify.sanitize(alt) : ''} />;
           },
           a({ href, children }) {
+            const safeHref = isSafeMarkdownUrl(href) ? DOMPurify.sanitize(href ?? '#') : '#';
             return (
-              <a href={href} target="_blank" rel="noreferrer noopener">
+              <a href={safeHref} target="_blank" rel="noreferrer noopener">
                 {children}
               </a>
             );

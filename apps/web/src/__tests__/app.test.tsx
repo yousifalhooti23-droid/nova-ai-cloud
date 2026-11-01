@@ -23,6 +23,7 @@ vi.mock('@/components/code/EditorPane', () => ({
 
 import App from '@/App';
 import { parseThinkingAndAnswer } from '@/components/chat/MessageBubble';
+import { isSafeMarkdownUrl } from '@/components/chat/Markdown';
 import { useAppStore } from '@/store/app';
 import { emptyStreaming, useChatStore } from '@/store/chat';
 import { initialAgent, useCodeStore } from '@/store/code';
@@ -437,5 +438,22 @@ describe('NOVA web UI', () => {
     const p4 = parseThinkingAndAnswer('Final text', 'Upstream CoT reasoning trace');
     expect(p4.thinking).toBe('Upstream CoT reasoning trace');
     expect(p4.answer).toBe('Final text');
+  });
+
+  it('sanitizes unsafe markdown and link protocols with isSafeMarkdownUrl', () => {
+    // Malicious protocols blocked
+    expect(isSafeMarkdownUrl('javascript:alert(1)')).toBe(false);
+    expect(isSafeMarkdownUrl('JAVASCRIPT:void(0)')).toBe(false);
+    expect(isSafeMarkdownUrl('vbscript:msgbox("xss")')).toBe(false);
+    expect(isSafeMarkdownUrl('file:///C:/Windows/System32/calc.exe')).toBe(false);
+    expect(isSafeMarkdownUrl('data:text/html;base64,PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0Pg==')).toBe(false);
+
+    // Safe protocols permitted
+    expect(isSafeMarkdownUrl('https://example.com')).toBe(true);
+    expect(isSafeMarkdownUrl('http://localhost:5173/test')).toBe(true);
+    expect(isSafeMarkdownUrl('mailto:support@nova.ai')).toBe(true);
+    expect(isSafeMarkdownUrl('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==')).toBe(true);
+    expect(isSafeMarkdownUrl('')).toBe(false);
+    expect(isSafeMarkdownUrl(undefined)).toBe(false);
   });
 });

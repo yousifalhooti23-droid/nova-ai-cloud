@@ -46,14 +46,16 @@ function ThinkingAccordion({
   thinking,
   isStreaming,
   isStillThinking,
+  hasAnswer,
   locale,
 }: {
   thinking: string;
   isStreaming?: boolean;
   isStillThinking?: boolean;
+  hasAnswer?: boolean;
   locale?: string;
 }) {
-  const [open, setOpen] = useState(Boolean(isStillThinking || isStreaming));
+  const [open, setOpen] = useState(Boolean(isStillThinking || isStreaming || !hasAnswer));
   const isAr = locale === 'ar';
 
   return (
@@ -168,6 +170,7 @@ export const MessageBubble = memo(function MessageBubble({
                   thinking={parsed.thinking}
                   isStreaming={isStreaming}
                   isStillThinking={parsed.isStillThinking}
+                  hasAnswer={Boolean(body)}
                   locale={locale}
                 />
               ) : null}
@@ -182,6 +185,19 @@ export const MessageBubble = memo(function MessageBubble({
                   <span className="pulse-dot h-1.5 w-1.5 rounded-full bg-accent" />
                   {parsed.isStillThinking ? (locale === 'ar' ? 'يتأمل ويحلل الإجابة...' : 'Reasoning deeply...') : t('chat.thinking')}
                 </span>
+              ) : parsed.thinking ? (
+                <div className="mt-1 flex flex-wrap items-center justify-between gap-2 border-t border-line/60 pt-2 text-[12px] text-muted">
+                  <span className="inline-flex items-center gap-1.5 text-warning font-medium">
+                    <AlertTriangle size={13} className="shrink-0 text-warning" />
+                    {locale === 'ar' ? 'اكتملت مرحلة التفكير وتوقف التوليد عند حد الرموز قبل كتابة الرد النهائي.' : 'Thought process completed, but stopped before the final answer.'}
+                  </span>
+                  {onRegenerate ? (
+                    <Button size="sm" variant="outline" className="!py-0.5 text-[11px]" onClick={onRegenerate}>
+                      <RefreshCw size={11} className="me-1" />
+                      {locale === 'ar' ? 'إعادة المحاولة' : 'Retry'}
+                    </Button>
+                  ) : null}
+                </div>
               ) : (
                 <div className="flex flex-wrap items-center justify-between gap-2 py-0.5 text-[12.5px] text-muted">
                   <span className="inline-flex items-center gap-1.5 text-warning/90 font-medium">

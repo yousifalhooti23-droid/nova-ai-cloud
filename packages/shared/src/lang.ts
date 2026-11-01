@@ -119,9 +119,8 @@ export function buildTree(files: { path: string; sizeBytes?: number }[]): TreeNo
   return root.children!;
 }
 
-/** Mask a secret for display. Never returns enough characters to reconstruct it. */
+/** Mask a secret for display. Opaque mask with zero exposed characters to prevent data leaks. */
 export function maskSecretSafe(value: string): string {
   if (!value) return '';
-  if (value.length <= 8) return '****';
-  return `${value.slice(0, 4)}${'*'.repeat(Math.min(12, value.length - 8))}${value.slice(-4)}`;
+  return '••••••••';
 }

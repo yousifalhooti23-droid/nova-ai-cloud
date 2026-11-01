@@ -18,7 +18,15 @@ export function registerHealthRoutes(app: Hono<AppEnv>, deps: AppDeps) {
       },
       blob: { kind: deps.blob.kind, ready: true },
       sandbox: { kind: sandbox.kind, ready: sandbox.ready, detail: sandbox.detail },
-      providers: deps.router.providerInfos(),
+      providers: deps.router.providerInfos().map((p) => ({
+        id: p.id,
+        label: p.label,
+        status: p.status,
+        detail: p.status === 'ready' ? 'Ready' : p.detail,
+        modelCount: p.modelCount,
+        simulated: p.simulated,
+        docsUrl: p.docsUrl,
+      })),
       time: new Date().toISOString(),
     };
     return c.json(body);

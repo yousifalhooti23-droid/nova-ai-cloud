@@ -4,6 +4,7 @@ import { GitService } from './agent/git.js';
 import { constantTimeEqual } from './auth/crypto.js';
 import type { AppDeps, AppEnv } from './context.js';
 import { describeError, HttpError } from './lib/errors.js';
+import { globalIpRateLimiter } from './lib/rate-limit.js';
 import { registerAgentRoutes } from './routes/agent.js';
 import { parseCookieHeader, registerAuthRoutes } from './routes/auth.js';
 import { registerChatRoutes } from './routes/chat.js';
@@ -28,6 +29,19 @@ const PUBLIC_AUTH_PATHS = new Set([
   '/api/auth/logout',
 ]);
 
+function isAllowedOrigin(origin: string | undefined, configuredAllowed: string[], userAuthEnabled: boolean): boolean {
+  if (!origin) return true;
+  if (configuredAllowed.includes('*') && !userAuthEnabled) return true;
+  if (configuredAllowed.includes(origin)) return true;
+  // Localhost / Loopback dev servers on any port (Vite, Hono, Node dev server)
+  if (/^https?:\/\/(?:localhost|127\.0\.0\.1|0\.0\.0\.0)(?::\d+)?$/i.test(origin)) return true;
+  // Tauri desktop app, Capacitor, or custom webview schemes
+  if (/^(?:tauri|capacitor):\/\//i.test(origin) || /^https?:\/\/(?:tauri|capacitor)\.localhost(?::\d+)?$/i.test(origin)) return true;
+  // Cloudflare Workers and Cloudflare Pages official domains
+  if (/^https:\/\/([a-zA-Z0-9-]+\.)*(?:workers\.dev|pages\.dev)$/i.test(origin)) return true;
+  return false;
+}
+
 /**
  * Build the HTTP app. The same Hono instance is exported by the Workers entry
  * (src/index.ts) and mounted by the Node dev runtime (src/node.ts).
@@ -40,20 +54,63 @@ export function createApp(deps: AppDeps) {
     c.set('requestId', newId('req'));
     c.set('startedAt', Date.now());
 
-    // CORS: same-origin by default; explicit allow-list otherwise.
+    // CORS: strict yet flexible allow-list protecting against unauthorized cross-origin requests
     const origin = c.req.header('origin');
-    const allowed = deps.cfg.allowedOrigins;
-    if (origin && (allowed.includes('*') || allowed.includes(origin))) {
+    const originAllowed = isAllowedOrigin(origin, deps.cfg.allowedOrigins, deps.cfg.userAuthEnabled);
+
+    if (origin && originAllowed) {
       c.res.headers.set('access-control-allow-origin', origin);
       c.res.headers.set('access-control-allow-methods', 'GET,POST,PATCH,PUT,DELETE,OPTIONS');
-      c.res.headers.set('access-control-allow-headers', 'content-type,authorization,x-nova-admin,x-nova-token');
+      c.res.headers.set(
+        'access-control-allow-headers',
+        'content-type,authorization,x-nova-admin,x-nova-token,x-session-id,x-client-session-id',
+      );
       c.res.headers.set('access-control-max-age', '86400');
       c.res.headers.set('vary', 'Origin');
     }
-    if (c.req.method === 'OPTIONS') return c.body(null, 204);
+
+    if (c.req.method === 'OPTIONS') {
+      const headers = new Headers();
+      if (origin && originAllowed) {
+        headers.set('access-control-allow-origin', origin);
+        headers.set('access-control-allow-methods', 'GET,POST,PATCH,PUT,DELETE,OPTIONS');
+        headers.set('access-control-allow-headers', 'content-type,authorization,x-nova-admin,x-nova-token,x-session-id,x-client-session-id');
+        headers.set('access-control-max-age', '86400');
+        headers.set('vary', 'Origin');
+      }
+      return new Response(null, { status: 204, headers });
+    }
 
     const isApi = c.req.path.startsWith('/api/');
     const isUploadRead = (c.req.method === 'GET' || c.req.method === 'HEAD') && c.req.path.startsWith('/api/uploads/');
+
+    // Anti-Abuse IP Rate Limiter (protects free cloud quotas; exempts loopback and health checks)
+    const clientIp =
+      c.req.header('cf-connecting-ip') ??
+      c.req.header('x-real-ip') ??
+      c.req.header('x-forwarded-for')?.split(',')[0]?.trim() ??
+      '127.0.0.1';
+
+    const isLoopback = clientIp === '127.0.0.1' || clientIp === '::1' || clientIp === 'localhost';
+
+    if (isApi && !isLoopback && c.req.path !== '/api/health') {
+      const rl = globalIpRateLimiter.isLimited(clientIp);
+      c.res.headers.set('X-RateLimit-Limit', '25');
+      c.res.headers.set('X-RateLimit-Remaining', String(rl.remaining));
+      c.res.headers.set('X-RateLimit-Reset', String(rl.resetInSec));
+
+      if (rl.limited) {
+        c.res.headers.set('Retry-After', String(rl.resetInSec));
+        return c.json(
+          {
+            error: 'تم تجاوز الحد الأقصى المسموح به للطلبات بالدقيقة. يرجى الانتظار لحماية الحصص السحابية المجانية.',
+            code: 'rate_limited',
+            hint: `Too many requests from this IP. Please wait ${rl.resetInSec} seconds.`,
+          },
+          429,
+        );
+      }
+    }
 
     // Optional shared access token guard (constant-time comparison).
     if (deps.cfg.accessToken && isApi && c.req.path !== '/api/health') {
@@ -97,6 +154,8 @@ export function createApp(deps: AppDeps) {
       const queryMediaToken = isUploadRead ? c.req.query('token') : undefined;
       const candidateToken = bearerToken || cookieToken || queryMediaToken;
       const authHit = candidateToken ? await deps.auth.authenticateToken(candidateToken) : null;
+      const rawSessionId = c.req.header('x-session-id') || c.req.header('x-client-session-id');
+      const cleanSessionId = rawSessionId ? rawSessionId.trim().slice(0, 64).replace(/[^a-zA-Z0-9_-]/g, '') : undefined;
 
       if (authHit) {
         const scopedStore = new ScopedStore(deps.store, deps.auth.repo, authHit.user.id);
@@ -116,6 +175,18 @@ export function createApp(deps: AppDeps) {
           },
           401,
         );
+      } else if (cleanSessionId) {
+        // Strict tenant isolation for anonymous / local sessions via client-generated cryptographic session ID
+        const sessionUserId = `sess_${cleanSessionId}`;
+        const scopedStore = new ScopedStore(deps.store, deps.auth.repo, sessionUserId);
+        c.set('deps', {
+          ...deps,
+          store: scopedStore,
+          router: deps.router.withStore(scopedStore),
+          git: new GitService(scopedStore),
+          currentUser: undefined,
+          currentTokenHash: undefined,
+        });
       }
     }
 

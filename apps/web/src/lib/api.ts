@@ -119,6 +119,20 @@ function safeSessionStorage(): Storage | null {
   }
 }
 
+export function getClientSessionId(): string {
+  try {
+    const storage = safeLocalStorage();
+    let id = storage?.getItem('nova_client_session_id');
+    if (!id) {
+      id = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `sess_${Math.random().toString(36).slice(2)}${Date.now().toString(36)}`;
+      storage?.setItem('nova_client_session_id', id);
+    }
+    return id;
+  } catch {
+    return 'default_session';
+  }
+}
+
 function authHeaders(extra?: HeadersInit): Record<string, string> {
   const out: Record<string, string> = {};
   if (extra) {
@@ -130,6 +144,8 @@ function authHeaders(extra?: HeadersInit): Record<string, string> {
   if (sess && !out.authorization && !out.Authorization) {
     out.authorization = `Bearer ${sess}`;
   }
+  const sessionId = getClientSessionId();
+  if (sessionId) out['x-session-id'] = sessionId;
   return out;
 }
 

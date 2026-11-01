@@ -341,29 +341,38 @@ export async function generateCloudImage(
     }
   }
 
-  // 3. 100% Free Cloud GPU Fallback: Pollinations Flux & Turbo (unlimited, no quota/neuron limits)
+  // 3. 100% Free Cloud GPU Fallback: Pollinations Cascade (unlimited, no quota/neuron limits)
   if (!imageBytes || imageBytes.byteLength < 256) {
-    const sanitizedPrompt = promptUsed
+    let sanitizedPrompt = promptUsed
       .replace(/(?:WhatsApp Image|image|photo|att_)[^\n]*\.(?:jpeg|jpg|png|webp)/gi, '')
       .replace(/[\r\n\t]+/g, ' ')
       .replace(/[^a-zA-Z0-9\s\u0600-\u06FF,-]/g, ' ')
       .replace(/\s+/g, ' ')
       .trim()
-      .slice(0, 240);
+      .slice(0, 220);
+
+    if (sanitizedPrompt.length < 3) {
+      sanitizedPrompt = 'aesthetic cinematic 3d render, dramatic studio lighting, ultra detailed 8k masterwork';
+    }
 
     const seed = Math.floor(Math.random() * 1000000);
-    const modelsToTry = ['flux', 'turbo'];
+    const endpointsToTry = [
+      `https://image.pollinations.ai/prompt/${encodeURIComponent(sanitizedPrompt)}?width=${width}&height=${height}&model=flux&seed=${seed}&nologo=true`,
+      `https://image.pollinations.ai/prompt/${encodeURIComponent(sanitizedPrompt)}?width=${width}&height=${height}&seed=${seed}&nologo=true`,
+      `https://image.pollinations.ai/prompt/${encodeURIComponent(sanitizedPrompt)}?width=${width}&height=${height}&model=turbo&seed=${seed}&nologo=true`,
+      `https://pollinations.ai/p/${encodeURIComponent(sanitizedPrompt)}?width=${width}&height=${height}&seed=${seed}&nologo=true`,
+    ];
 
-    for (const m of modelsToTry) {
+    for (let i = 0; i < endpointsToTry.length; i++) {
+      const polUrl = endpointsToTry[i];
       try {
-        const polUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(sanitizedPrompt)}?width=${width}&height=${height}&model=${m}&seed=${seed}&nologo=true`;
-        const polResp = await fetch(polUrl, { signal: opts.signal ?? AbortSignal.timeout(20000) });
+        const polResp = await fetch(polUrl, { signal: opts.signal ?? AbortSignal.timeout(22000) });
         if (polResp.ok) {
           const polBuf = new Uint8Array(await polResp.arrayBuffer());
           if (polBuf.byteLength > 256) {
             imageBytes = polBuf;
             mime = polResp.headers.get('content-type') || 'image/jpeg';
-            provider = `pollinations-${m}`;
+            provider = `pollinations-cloud-${i === 0 ? 'flux' : i === 1 ? 'default' : i === 2 ? 'turbo' : 'p'}`;
             d.log.info('generated image via free cloud GPU fallback', { provider, bytes: polBuf.byteLength });
             break;
           }
@@ -372,7 +381,7 @@ export async function generateCloudImage(
         }
       } catch (err) {
         lastErr = err instanceof Error ? err.message : String(err);
-        d.log.warn('free cloud GPU fallback failed, trying next', { model: m, error: lastErr });
+        d.log.warn('free cloud GPU endpoint failed, trying next candidate', { index: i, error: lastErr });
       }
     }
   }

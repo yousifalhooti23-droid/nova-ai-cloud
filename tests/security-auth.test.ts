@@ -6,6 +6,7 @@ import { Endpoints } from '@nova/shared';
 import { bootstrap } from '../apps/worker/src/bootstrap.js';
 import { FileBlobStore, MemoryBlobStore } from '../apps/worker/src/storage/blob.js';
 import { JsonStore } from '../apps/worker/src/storage/json-store.js';
+import { IpRateLimiter } from '../apps/worker/src/lib/rate-limit.js';
 import { ScriptedAdapter, testModel } from './helpers.js';
 
 describe('Windows FileBlobStore path normalization & traversal defense', () => {
@@ -367,5 +368,33 @@ describe('Fortress multi-user auth, anti-fake email + mandatory OTP, zero-leak i
       lastStatus = r.status;
     }
     expect(lastStatus).toBe(429);
+  });
+
+  it('enforces IP rate limiter sliding window and isolates quotas', () => {
+    const limiter = new IpRateLimiter(60_000, 3);
+    expect(limiter.isLimited('198.51.100.1').limited).toBe(false);
+    expect(limiter.isLimited('198.51.100.1').limited).toBe(false);
+    expect(limiter.isLimited('198.51.100.1').limited).toBe(false);
+    // 4th request from same IP is limited
+    const over = limiter.isLimited('198.51.100.1');
+    expect(over.limited).toBe(true);
+    expect(over.resetInSec).toBeGreaterThan(0);
+    // Different IP is NOT affected
+    expect(limiter.isLimited('198.51.100.2').limited).toBe(false);
+  });
+
+  it('sanitizes /api/health to never leak partial keys or secret environment variables', async () => {
+    const res = await apiReq('GET', Endpoints.health);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as any;
+    expect(body.ok).toBe(true);
+    expect(Array.isArray(body.providers)).toBe(true);
+    for (const p of body.providers) {
+      expect(p.detail).not.toContain('sk-');
+      expect(p.detail).not.toContain('key');
+      expect(p.detail).not.toContain('secret');
+      expect(p.detail).not.toContain('http://');
+      expect(p.detail).not.toContain('https://');
+    }
   });
 });

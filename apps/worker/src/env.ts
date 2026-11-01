@@ -93,8 +93,8 @@ function bool(value: string | undefined, fallback = false): boolean {
  */
 export function loadConfig(env: RawEnv): NovaConfig {
   const runtime = read(env, 'NOVA_RUNTIME') === 'node' ? 'node' : 'workers';
-  const priorityRaw = list(read(env, 'NOVA_PROVIDER_PRIORITY'), ['gemini', 'groq', 'openrouter', 'workers-ai', 'custom']);
-  const providerPriority = priorityRaw as ProviderId[];
+  const rawPriority = list(read(env, 'NOVA_PROVIDER_PRIORITY'), ['openrouter', 'gemini', 'groq', 'workers-ai', 'custom']);
+  const providerPriority = rawPriority as ProviderId[];
 
   const hasAiBinding = Boolean(env.AI);
   const workersAiMissing = hasAiBinding
@@ -258,5 +258,23 @@ export function withRuntimeSecrets(cfg: NovaConfig, secrets: RuntimeSecrets): No
       missing: enabled ? undefined : providers[id].missing,
     };
   }
-  return { ...cfg, providers };
+
+  // Automatically elevate configured, active-key providers (OpenRouter, Gemini, Groq)
+  // to the front of the priority list so user-added keys are immediately utilized.
+  const activeKeys: ProviderId[] = [];
+  for (const p of ['openrouter', 'gemini', 'groq'] as ProviderId[]) {
+    if (providers[p]?.enabled && providers[p]?.apiKey) {
+      activeKeys.push(p);
+    }
+  }
+  if (providers.custom?.enabled && providers.custom?.baseUrl) {
+    activeKeys.push('custom');
+  }
+
+  const reorderedPriority: ProviderId[] = [
+    ...activeKeys,
+    ...cfg.providerPriority.filter((p) => !activeKeys.includes(p)),
+  ];
+
+  return { ...cfg, providers, providerPriority: reorderedPriority };
 }

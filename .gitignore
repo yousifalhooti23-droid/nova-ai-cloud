@@ -2,8 +2,12 @@ node_modules/
 dist/
 .wrangler/
 .dev.vars
+.dev.vars.*
 .env
-.env.local
+.env.*
+*.env
+nova.env
+.nova/
 *.log
 .nova-data/
 coverage/
