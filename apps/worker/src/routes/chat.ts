@@ -151,7 +151,7 @@ export function registerChatRoutes(app: Hono<AppEnv>) {
     return sseResponse(async (emit, signal) => {
       const assistantMessageId = newId('msg');
       try {
-        const studioIntent = !hasAttachments ? detectStudioIntent(effectiveMessage, req.studioMode) : req.studioMode === 'website' ? 'website' : null;
+        const studioIntent = detectStudioIntent(effectiveMessage, req.studioMode);
 
         // Direct Cloud GPU Image / Video Studio Generation ($0 free)
         if (studioIntent === 'image' || studioIntent === 'video') {
@@ -294,11 +294,16 @@ export function registerChatRoutes(app: Hono<AppEnv>) {
           'chat',
         );
 
+        const finalContent = (result.text || text).trim();
+        if (!finalContent) {
+          throw new HttpError(502, 'تعذّر إكمال الرد من النموذج (تم إرجاع رد فارغ). يرجى المحاولة وسيقوم النظام باختيار نموذج بديل تلقائياً.', 'empty_response');
+        }
+
         await d.store.appendMessage({
           id: assistantMessageId,
           conversationId,
           role: 'assistant',
-          content: result.text || text,
+          content: finalContent,
           status: 'complete',
           modelId: result.model.id,
           providerId: result.provider,

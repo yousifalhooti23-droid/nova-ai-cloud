@@ -30,6 +30,8 @@ export class WorkersAiAdapter implements ProviderAdapter {
    * and falls back to a provider that can actually answer.
    */
   private localModeDetected = false;
+  /** Sticky latch: if 10,000 daily neurons are exhausted, do not attempt Workers AI until reset. */
+  private rateLimitedUntil = 0;
 
   constructor(private getBinding: (cfg: NovaConfig, env: RawEnv) => AiBinding | undefined, private env: RawEnv) {}
 
@@ -64,6 +66,7 @@ export class WorkersAiAdapter implements ProviderAdapter {
   }
 
   availableModels(cfg: NovaConfig): ModelInfo[] {
+    if (this.rateLimitedUntil > Date.now()) return [];
     const ai = this.getBinding(cfg, this.env);
     if (!ai) return [];
     // Only models verified as callable; gated ones are kept but flagged.
@@ -71,6 +74,13 @@ export class WorkersAiAdapter implements ProviderAdapter {
   }
 
   status(cfg: NovaConfig): { status: ProviderStatus; detail: string; simulated: boolean } {
+    if (this.rateLimitedUntil > Date.now()) {
+      return {
+        status: 'disabled',
+        detail: 'Workers AI daily free allocation of 10,000 neurons exhausted. Requests are automatically routed to free OpenRouter models.',
+        simulated: false,
+      };
+    }
     const ai = this.getBinding(cfg, this.env);
     if (!ai) {
       return {
@@ -128,7 +138,8 @@ export class WorkersAiAdapter implements ProviderAdapter {
         this.localModeDetected = true; // stop offering this provider in this isolate
         throw new HttpError(503, 'Workers AI cannot run in local mode.', 'workers_ai_needs_remote', LOCAL_MODE_HINT);
       }
-      if (/rate limit|429/i.test(message)) {
+      if (/rate limit|429|allocation|neuron|4006|quota/i.test(message)) {
+        this.rateLimitedUntil = Date.now() + 2 * 60 * 60 * 1000;
         throw new HttpError(429, `Workers AI rate limit: ${message}`, 'rate_limited', 'Free allocation is 10,000 Neurons/day. Switch model class or wait for the daily reset.');
       }
       if (/not found|unknown model|invalid model/i.test(message)) {
@@ -158,6 +169,9 @@ export class WorkersAiAdapter implements ProviderAdapter {
     const tokensOut = Number(usage.completion_tokens ?? usage.output_tokens ?? estimateTokens(text));
     if (text) handlers.onText?.(text);
     handlers.onUsage?.({ tokensIn, tokensOut });
+    if (!text.trim() && toolCalls.length === 0) {
+      throw new HttpError(502, 'Workers AI produced an empty response.', 'upstream_empty');
+    }
     return { text, reasoning: result.reasoning ?? '', toolCalls, finishReason: toolCalls.length ? 'tool_calls' : 'stop', tokensIn, tokensOut };
   }
 
@@ -179,6 +193,14 @@ export class WorkersAiAdapter implements ProviderAdapter {
     const pending = new Map<number, { id: string; name: string; args: string }>();
 
     const handle = (json: any) => {
+      if (json?.errors || json?.error) {
+        const errMsg = Array.isArray(json?.errors) ? json.errors.map((e: any) => e.message).join(' ') : String(json.error);
+        if (/allocation|neuron|4006|rate limit|429/i.test(errMsg)) {
+          this.rateLimitedUntil = Date.now() + 2 * 60 * 60 * 1000;
+          throw new HttpError(429, `Workers AI: ${errMsg}`, 'rate_limited');
+        }
+        throw new HttpError(502, `Workers AI: ${errMsg}`, 'upstream_error');
+      }
       if (json?.usage) {
         tokensIn = Number(json.usage.input_tokens ?? json.usage.prompt_tokens ?? tokensIn);
         tokensOut = Number(json.usage.output_tokens ?? json.usage.completion_tokens ?? tokensOut);
@@ -229,7 +251,8 @@ export class WorkersAiAdapter implements ProviderAdapter {
           if (!data || data === '[DONE]') continue;
           try {
             handle(JSON.parse(data));
-          } catch {
+          } catch (err) {
+            if (err instanceof HttpError) throw err;
             /* partial frame; ignore */
           }
         }
@@ -242,6 +265,10 @@ export class WorkersAiAdapter implements ProviderAdapter {
       .sort((a, b) => a[0] - b[0])
       .map(([i, s]) => ({ id: s.id || `call_${i}`, name: s.name, arguments: safeParseArgs(s.args) }))
       .filter((tc) => tc.name);
+
+    if (!text.trim() && toolCalls.length === 0) {
+      throw new HttpError(502, 'Workers AI produced an empty stream response.', 'upstream_empty');
+    }
 
     if (!tokensOut) tokensOut = estimateTokens(text + reasoning);
     if (!tokensIn) tokensIn = estimateTokens(text) + 1;

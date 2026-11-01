@@ -90,7 +90,20 @@ export const MessageBubble = memo(function MessageBubble({
                   <span className="pulse-dot h-1.5 w-1.5 rounded-full bg-accent" />
                   {t('chat.thinking')}
                 </span>
-              ) : null}
+              ) : (
+                <div className="flex flex-wrap items-center justify-between gap-2 py-0.5 text-[12.5px] text-muted">
+                  <span className="inline-flex items-center gap-1.5 text-warning/90 font-medium">
+                    <AlertTriangle size={13} className="shrink-0 text-warning" />
+                    {locale === 'ar' ? 'لم يتم إرجاع محتوى من هذا النموذج (الحصة اليومية مستهلكة أو استجابة فارغة).' : 'No response content was returned by this model.'}
+                  </span>
+                  {onRegenerate ? (
+                    <Button size="sm" variant="outline" className="!py-0.5 text-[11px]" onClick={onRegenerate}>
+                      <RefreshCw size={11} className="me-1" />
+                      {locale === 'ar' ? 'إعادة المحاولة' : 'Retry'}
+                    </Button>
+                  ) : null}
+                </div>
+              )}
               {isStreaming && body ? <span className="ms-0.5 inline-block h-3.5 w-[7px] translate-y-0.5 animate-pulse bg-accent/80" /> : null}
             </>
           )}

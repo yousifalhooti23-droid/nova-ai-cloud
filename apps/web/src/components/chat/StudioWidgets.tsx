@@ -85,10 +85,29 @@ export function prepareWebsiteHtml(rawCode: string): PreparedWebsite {
 })();
 </script>`;
 
-  // Base typography & smooth rendering fallback
+  // 5b. Synthesize standard :root CSS variables for any @property definitions (fixes white canvas on Houdini-unsupported WebViews)
+  const houdiniProps: string[] = [];
+  const propertyRe = /@property\s+(--[\w-]+)\s*\{[^}]*initial-value\s*:\s*([^;]+);/gi;
+  let propMatch: RegExpExecArray | null;
+  while ((propMatch = propertyRe.exec(clean)) !== null) {
+    houdiniProps.push(`${propMatch[1]}: ${propMatch[2].trim()};`);
+  }
+  const synthesizedRootStyle = houdiniProps.length > 0 ? `<style>\n:root {\n  ${houdiniProps.join('\n  ')}\n}\n</style>` : '';
+
+  // Base typography & dark canvas rendering fallback (ensures text is NEVER white-on-white)
   const baseFallbackStyle = `<style>
-  html { color-scheme: light dark; }
-  body { margin: 0; min-height: 100vh; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Cairo", "Tajawal", sans-serif; }
+  html {
+    background-color: #0b0e14;
+    color: #f1f5f9;
+    color-scheme: dark;
+  }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    background-color: #0b0e14;
+    color: #f1f5f9;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Cairo", "Tajawal", sans-serif;
+  }
 </style>`;
 
   // 6. Handle truncated code that ended before <body> was rendered
@@ -116,11 +135,12 @@ export function prepareWebsiteHtml(rawCode: string): PreparedWebsite {
     if (!hasHtmlClose) clean += '\n</html>';
   }
 
-  // Inject storage shim & fallback styles
+  // Inject storage shim, synthesized root variables & fallback styles
+  const injectedHead = `${storageShim}\n${synthesizedRootStyle}\n${baseFallbackStyle}`;
   if (/<head[\s>]/i.test(clean)) {
-    clean = clean.replace(/<head[\s>]/i, (match) => `${match}\n${storageShim}\n${baseFallbackStyle}`);
+    clean = clean.replace(/<head[\s>]/i, (match) => `${match}\n${injectedHead}`);
   } else {
-    clean = `${storageShim}\n${baseFallbackStyle}\n${clean}`;
+    clean = `${injectedHead}\n${clean}`;
   }
 
   return {

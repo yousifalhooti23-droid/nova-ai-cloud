@@ -341,6 +341,30 @@ export async function generateCloudImage(
     }
   }
 
+  // 3. 100% Free Cloud GPU Fallback: Pollinations Flux (unlimited, no quota/neuron limits)
+  if (!imageBytes || imageBytes.byteLength < 256) {
+    try {
+      const cleanPrompt = encodeURIComponent(truncate(promptUsed, 600));
+      const seed = Math.floor(Math.random() * 1000000);
+      const polUrl = `https://image.pollinations.ai/prompt/${cleanPrompt}?width=${width}&height=${height}&model=flux&seed=${seed}&nologo=true`;
+      const polResp = await fetch(polUrl, { signal: opts.signal ?? AbortSignal.timeout(20000) });
+      if (polResp.ok) {
+        const polBuf = new Uint8Array(await polResp.arrayBuffer());
+        if (polBuf.byteLength > 256) {
+          imageBytes = polBuf;
+          mime = polResp.headers.get('content-type') || 'image/jpeg';
+          provider = 'pollinations-flux';
+          d.log.info('generated image via free cloud GPU fallback', { provider, bytes: polBuf.byteLength });
+        }
+      } else {
+        lastErr = `Free cloud GPU HTTP ${polResp.status}`;
+      }
+    } catch (err) {
+      lastErr = err instanceof Error ? err.message : String(err);
+      d.log.warn('free cloud GPU fallback failed', { error: lastErr });
+    }
+  }
+
   if (!imageBytes || imageBytes.byteLength < 256) {
     throw new HttpError(
       502,
@@ -519,13 +543,23 @@ export function detectStudioIntent(message: string, explicitMode?: string): 'ima
     return explicitMode;
   }
   const m = message.trim();
-  if (/^(ارسم|انشئ\s+صور[ةه]|أنشئ\s+صور[ةه]|انشاء\s+صور[ةه]|إنشاء\s+صور[ةه]|ولد\s+صور[ةه]|ولّد\s+صور[ةه]|صمم\s+صور[ةه]|ابغى\s+صور[ةه]|أريد\s+صور[ةه]|اريد\s+صور[ةه]|سوي(?:\s+لي)?\s+صور[ةه]|اصنع\s+صور[ةه]|اعمل\s+صور[ةه]|create an? image|generate an? image|draw\s)/i.test(m)) {
+  if (
+    /^(?:صمم|ارسم|انشئ|أنشئ|انشاء|إنشاء|ولد|ولّد|ابغى|أريد|اريد|سوي|اصنع|اعمل)(?:\s+لي)?\s+(?:صور[ةه]|بوستر|poster|شعار|لوجو|لوقو|غلاف|خلفي[ةه]|ايقون[ةه]|رسم[ةه])/i.test(m) ||
+    /^(?:ارسم|draw\s|صورة\s+لـ|صورة\s+عن|بوستر\s+لـ|بوستر\s+عن|خريطة\s+عمان|خريطة\s+|create an? image|generate an? image)/i.test(m)
+  ) {
     return 'image';
   }
-  if (/^(انشئ\s+(?:فيديو|فديو|قديو)|أنشئ\s+(?:فيديو|فديو|قديو)|انشاء\s+(?:فيديو|فديو|قديو)|إنشاء\s+(?:فيديو|فديو|قديو)|صمم\s+(?:فيديو|فديو|قديو)|اصنع\s+(?:فيديو|فديو|قديو)|ولد\s+(?:فيديو|فديو|قديو)|ولّد\s+(?:فيديو|فديو|قديو)|سوي(?:\s+لي)?\s+(?:فيديو|فديو|قديو)|ابغى\s+(?:فيديو|فديو|قديو)|أريد\s+(?:فيديو|فديو|قديو)|اريد\s+(?:فيديو|فديو|قديو)|اعمل(?:\s+لي)?\s+(?:فيديو|فديو|قديو)|create a video|generate a video|make a video)/i.test(m)) {
+  if (
+    /^(?:انشئ|أنشئ|انشاء|إنشاء|صمم|اصنع|ولد|ولّد|سوي|ابغى|أريد|اريد|اعمل)(?:\s+لي)?\s+(?:فيديو|فديو|قديو|storyboard|فيديو\s+قصير|مشهد)/i.test(m) ||
+    /^(?:create a video|generate a video|make a video)/i.test(m)
+  ) {
     return 'video';
   }
-  if (/^(صمم\s+موقع|انشئ\s+موقع|أنشئ\s+موقع|انشاء\s+موقع|إنشاء\s+موقع|سوي(?:\s+لي)?\s+موقع|ابني\s+موقع|اصنع\s+موقع|اريد\s+موقع|أريد\s+موقع|ابغى\s+موقع|صمم\s+صفح[ةه]\s+ويب|صمم\s+متجر|build a website|create a website|design a website|make a landing page)/i.test(m)) {
+  if (
+    /^(?:صمم|انشئ|أنشئ|انشاء|إنشاء|سوي|ابني|اصنع|اريد|أريد|ابغى|اعمل)(?:\s+لي)?\s+(?:موقع|متجر|صفح[ةه]\s+ويب|بورتفوليو|dashboard|landing\s+page)/i.test(m) ||
+    /^(?:موقع|متجر|صفحة\s+موقع|كود\s+موقع)\s+(?:تجريبي|كامل|بسيط|عن|لـ|جديد|شخصي|تفاعلي|web)/i.test(m) ||
+    /^(?:build a website|create a website|design a website|make a landing page)/i.test(m)
+  ) {
     return 'website';
   }
   return null;

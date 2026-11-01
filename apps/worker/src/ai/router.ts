@@ -266,16 +266,21 @@ export class ModelRouter {
     let result: CompletionResult;
     try {
       result = await resolution.adapter.complete({ ...req, model: resolution.model }, trackedHandlers, this.config());
+      if (!result.text?.trim() && (!result.toolCalls || result.toolCalls.length === 0)) {
+        throw new HttpError(502, 'Upstream model returned empty output.', 'upstream_empty');
+      }
     } catch (err) {
       this.log.warn('provider completion failed', { model: resolution.model.id, error: String(err instanceof Error ? err.message : err) });
       const status = err instanceof HttpError ? err.status : 0;
-      if (!streamedAny && (status === 429 || status === 502 || status === 503 || /rate limit|overloaded|capacity/i.test(String(err)))) {
+      const isQuotaOrRate = status === 429 || /rate limit|overloaded|capacity|allocation|neuron|4006|quota/i.test(String(err));
+      if (!streamedAny && (isQuotaOrRate || status === 502 || status === 503 || /empty|upstream_empty/i.test(String(err)))) {
         const cfg = this.config();
         const { models } = await this.inventory();
         const alt = models
           .filter(
             (m) =>
               m.id !== resolution.model.id &&
+              (isQuotaOrRate && resolution.model.provider === 'workers-ai' ? m.provider !== 'workers-ai' : true) &&
               m.access === 'open' &&
               m.freeTier === 'free' &&
               (!req.tools?.length || m.supportsTools) &&
@@ -291,6 +296,9 @@ export class ModelRouter {
             warnings: [...resolution.warnings, `Switched automatically from ${resolution.model.label} to ${alt.label}.`],
           };
           result = await resolution.adapter.complete({ ...req, model: alt }, handlers, cfg);
+          if (!result.text?.trim() && (!result.toolCalls || result.toolCalls.length === 0)) {
+            throw new HttpError(502, `Fallback model "${alt.label}" returned empty output.`, 'upstream_empty');
+          }
         } else {
           throw err;
         }
