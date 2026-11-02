@@ -44,6 +44,30 @@ interface Seed {
 const SEEDS: Seed[] = [
   /* ----------------------------- free allocation ------------------------- */
   {
+    id: 'flux-2',
+    upstreamId: '@cf/black-forest-labs/flux-2',
+    label: 'FLUX.2 Pro (Ultra-HD 1536px)',
+    vendor: 'Black Forest Labs',
+    classes: ['chat'],
+    contextWindow: 128000,
+    supportsVision: true,
+    pricing: null,
+    freeTier: 'free',
+    notes: 'توليد الصور وتصميم البوسترات بأعلى دقة 1536px بدون علامات مائية وبجودة FLUX.2 الخارقة.',
+  },
+  {
+    id: 'flux-1-schnell',
+    upstreamId: '@cf/black-forest-labs/flux-1-schnell',
+    label: 'FLUX.1 Schnell (Fast HD)',
+    vendor: 'Black Forest Labs',
+    classes: ['chat'],
+    contextWindow: 128000,
+    supportsVision: true,
+    pricing: null,
+    freeTier: 'free',
+    notes: 'توليد سريع للصور والرسومات بدقة عالية وسرعة فائقة.',
+  },
+  {
     id: 'qwen3.8-27b',
     upstreamId: '@cf/qwen/qwen3.8-27b',
     label: 'Qwen 3.8 27B',

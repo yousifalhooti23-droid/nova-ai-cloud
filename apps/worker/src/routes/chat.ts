@@ -101,7 +101,7 @@ export function registerChatRoutes(app: Hono<AppEnv>) {
     if (effectiveMessage.length > 200_000) throw badRequest('message is too long (max 200,000 characters)', 'too_long');
 
     const precomputedStudioIntent = !hasAttachments
-      ? detectStudioIntent(effectiveMessage, req.studioMode)
+      ? (detectStudioIntent(effectiveMessage, req.studioMode) ?? (req.modelId?.toLowerCase().includes('flux') ? 'image' : null))
       : req.studioMode === 'website'
         ? 'website'
         : null;
@@ -180,7 +180,7 @@ export function registerChatRoutes(app: Hono<AppEnv>) {
     return sseResponse(async (emit, signal) => {
       const assistantMessageId = newId('msg');
       try {
-        const studioIntent = detectStudioIntent(effectiveMessage, req.studioMode);
+        const studioIntent = detectStudioIntent(effectiveMessage, req.studioMode) ?? (req.modelId?.toLowerCase().includes('flux') ? 'image' : null);
 
         // Direct Cloud GPU Image Studio Generation ($0 free)
         if (studioIntent === 'image') {
