@@ -23,6 +23,7 @@ import { Endpoints } from '@nova/shared';
 
 const ACCESS_TOKEN_KEY = 'nova.access.token';
 const SESSION_TOKEN_KEY = 'nova.session.token';
+const ADMIN_TOKEN_KEY = 'nova.admin.token';
 
 /**
  * In-memory token mirrors guarantee authentication keeps working on mobile
@@ -31,6 +32,7 @@ const SESSION_TOKEN_KEY = 'nova.session.token';
  */
 let memoryAccessToken = '';
 let memorySessionToken = '';
+let memoryAdminToken = '';
 let authExpiredHandler: (() => void) | null = null;
 
 export function setAuthExpiredHandler(fn: (() => void) | null) {
@@ -39,6 +41,37 @@ export function setAuthExpiredHandler(fn: (() => void) | null) {
 
 export function notifyAuthExpired() {
   authExpiredHandler?.();
+}
+
+export function getStoredAdminToken(): string {
+  if (memoryAdminToken) return memoryAdminToken;
+  for (const store of [safeLocalStorage(), safeSessionStorage()]) {
+    if (!store) continue;
+    try {
+      const val = store.getItem(ADMIN_TOKEN_KEY) ?? '';
+      if (val) {
+        memoryAdminToken = val;
+        return val;
+      }
+    } catch {
+      /* ignore storage errors */
+    }
+  }
+  return '';
+}
+
+export function setStoredAdminToken(token: string) {
+  const clean = token.trim();
+  memoryAdminToken = clean;
+  for (const store of [safeLocalStorage(), safeSessionStorage()]) {
+    if (!store) continue;
+    try {
+      if (clean) store.setItem(ADMIN_TOKEN_KEY, clean);
+      else store.removeItem(ADMIN_TOKEN_KEY);
+    } catch {
+      /* ignore storage errors */
+    }
+  }
 }
 
 export function getStoredAccessToken(): string {
@@ -140,6 +173,8 @@ function authHeaders(extra?: HeadersInit): Record<string, string> {
   }
   const tok = getStoredAccessToken();
   if (tok) out['x-nova-token'] = tok;
+  const adminTok = getStoredAdminToken();
+  if (adminTok) out['x-nova-admin-token'] = adminTok;
   const sess = getStoredSessionToken();
   if (sess && !out.authorization && !out.Authorization) {
     out.authorization = `Bearer ${sess}`;
@@ -245,6 +280,61 @@ export interface ProbeResponse {
 
 export interface ProviderKeysResponse {
   keys: { provider: ProviderId; masked: string; baseUrl?: string | null }[];
+}
+
+export interface StudioTelemetryResponse {
+  runtime: string;
+  version: string;
+  priorityOrder: string[];
+  providers: {
+    id: ProviderId;
+    label: string;
+    status: string;
+    detail: string;
+    modelCount: number;
+    latencyMs: number;
+    pingOk: boolean;
+    docsUrl?: string;
+  }[];
+  totalModels: number;
+  availableModelsCount: number;
+  time: string;
+}
+
+export interface StudioLogEntry {
+  id: string;
+  timestamp: string;
+  provider: string;
+  model: string;
+  status: 'success' | 'failover' | 'error';
+  latencyMs: number;
+  tokensIn?: number;
+  tokensOut?: number;
+  failoverReason?: string;
+  error?: string;
+}
+
+export interface StudioLogsResponse {
+  logs: StudioLogEntry[];
+}
+
+export interface StudioStorageResponse {
+  store: { kind: string; ready: boolean; detail: string };
+  blob: { kind: string; ready: boolean; detail: string };
+  sandbox: { kind: string; ready: boolean; detail: string };
+  usage: {
+    totalCalls: number;
+    tokensIn: number;
+    tokensOut: number;
+    byProvider: Record<string, { calls: number; tokensIn: number; tokensOut: number }>;
+  };
+}
+
+export interface StudioBrainResponse {
+  masterSystemPrompt: string;
+  defaults: Record<string, string | null>;
+  agent?: any;
+  globalMemory: any[];
 }
 
 export const api = {
@@ -430,6 +520,32 @@ export const api = {
   listSkills: () => json<{ skills: NovaSkill[] }>('/api/skills', 'GET'),
   importGitHubSkill: (url: string) => json<{ ok: boolean; skill: NovaSkill; message: string }>('/api/skills/import-github', 'POST', { url }),
   toggleSkill: (skillId: string, enabled: boolean) => json<{ ok: boolean; skillId: string; enabled: boolean }>('/api/skills/toggle', 'POST', { skillId, enabled }),
+
+  /* ---- nova admin studio ---- */
+  adminStudioAuth: (body: { email: string; password: string }) =>
+    json<{ ok: boolean; token: string; user: { email: string; role: string; displayName: string } }>(
+      '/api/admin/studio/auth',
+      'POST',
+      body,
+    ),
+  getStudioTelemetry: () => json<StudioTelemetryResponse>('/api/admin/studio/telemetry', 'GET'),
+  getStudioLogs: (limit = 100) => json<StudioLogsResponse>(`/api/admin/studio/logs?limit=${limit}`, 'GET'),
+  getStudioStorage: () => json<StudioStorageResponse>('/api/admin/studio/storage', 'GET'),
+  getStudioBrain: () => json<StudioBrainResponse>('/api/admin/studio/brain', 'GET'),
+  saveStudioBrain: (body: { masterSystemPrompt?: string; defaults?: any; agent?: any }) =>
+    json<{ ok: boolean; settings: any }>('/api/admin/studio/brain', 'PUT', body),
+  saveStudioProviderKey: (body: { provider: ProviderId; apiKey?: string; baseUrl?: string }) =>
+    json<{ ok: boolean; provider: ProviderId; saved: boolean; masked?: string }>(
+      '/api/admin/studio/provider-key',
+      'POST',
+      body,
+    ),
+  deleteStudioProviderKey: (provider: ProviderId) =>
+    json<{ ok: boolean; provider: ProviderId; removed: boolean }>(
+      '/api/admin/studio/provider-key',
+      'DELETE',
+      { provider },
+    ),
 };
 
 /** Narrow an unknown error into something the UI can render. */

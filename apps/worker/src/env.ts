@@ -37,6 +37,7 @@ export interface NovaConfig {
   diagnosticEnabled: boolean;
   allowRuntimeKeys: boolean;
   adminToken?: string;
+  adminSecretPassword?: string;
   /** Optional shared secret protecting /api/* on public cloud deployments. */
   accessToken?: string;
   /** Enforce per-user registration/login, strict tenant isolation, and daily quotas. */
@@ -188,6 +189,7 @@ export function loadConfig(env: RawEnv): NovaConfig {
     diagnosticEnabled: providers.diagnostic.enabled,
     allowRuntimeKeys: bool(read(env, 'NOVA_ALLOW_RUNTIME_KEYS'), false),
     adminToken: read(env, 'NOVA_ADMIN_TOKEN'),
+    adminSecretPassword: read(env, 'ADMIN_SECRET_PASSWORD') ?? read(env, 'NOVA_ADMIN_PASSWORD') ?? read(env, 'NOVA_OWNER_INITIAL_PASSWORD'),
     accessToken: read(env, 'NOVA_ACCESS_TOKEN'),
     userAuthEnabled: bool(read(env, 'NOVA_REQUIRE_AUTH'), false),
     ownerEmail: read(env, 'NOVA_OWNER_EMAIL'),

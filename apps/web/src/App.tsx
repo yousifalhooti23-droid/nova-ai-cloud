@@ -8,6 +8,7 @@ import { SettingsModal } from '@/components/settings/SettingsModal';
 import { Button, Spinner, ToastStack } from '@/components/ui';
 import { ChatPage } from '@/pages/ChatPage';
 import { CodePage } from '@/pages/CodePage';
+import { StudioDashboard } from '@/pages/StudioDashboard';
 
 export default function App() {
   const locale = useAppStore((s) => s.locale);
@@ -71,6 +72,22 @@ function Shell() {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [toggleSidebar, setView, openSettings]);
+
+  // Detect /studio route on initial load or popstate
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.location.pathname.startsWith('/studio')) {
+      setView('studio');
+    }
+  }, [setView]);
+
+  if (view === 'studio') {
+    return (
+      <div className="h-full w-full bg-bg">
+        <StudioDashboard />
+        <ToastStack toasts={toasts} onDismiss={dismissToast} labels={{ error: t('error.network'), success: t('common.success') }} />
+      </div>
+    );
+  }
 
   if (health?.userAuthEnabled && !authChecked && !ready) {
     return (

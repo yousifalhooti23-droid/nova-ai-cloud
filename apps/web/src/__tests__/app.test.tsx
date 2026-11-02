@@ -75,6 +75,40 @@ function defaultRoutes(): Record<string, Handler> {
     'POST /api/memory': () => ({ entry: { id: 'mem_1', scope: 'project', scopeId: 'prj_1', key: 'note', content: 'x', createdAt: '2026-10-30T09:00:00.000Z', updatedAt: '2026-10-30T09:00:00.000Z' } }),
     'GET /api/usage': () => ({ records: [], totals: { tokensIn: 0, tokensOut: 0, byProvider: {} } }),
     'POST /api/sandbox/exec': () => jsonResponse({ error: 'Sandbox is not configured — command execution is disabled.', code: 'sandbox_not_configured' }, 503),
+    'POST /api/admin/studio/auth': () => ({
+      ok: true,
+      token: 'nva_123456_sig',
+      user: { email: 'yousifalhooti23@gmail.com', role: 'owner', displayName: 'Yousif' },
+    }),
+    'GET /api/admin/studio/telemetry': () => ({
+      runtime: 'Cloudflare Worker',
+      version: '0.5.0',
+      priorityOrder: ['openrouter', 'gemini', 'groq', 'workers-ai'],
+      providers: [
+        { id: 'openrouter', label: 'OpenRouter', status: 'ready', detail: 'OK', modelCount: 8, latencyMs: 110, pingOk: true },
+      ],
+      totalModels: 8,
+      availableModelsCount: 8,
+      time: new Date().toISOString(),
+    }),
+    'GET /api/admin/studio/logs': () => ({ logs: [] }),
+    'GET /api/admin/studio/storage': () => ({
+      store: { kind: 'd1', ready: true, detail: 'Cloudflare D1' },
+      blob: { kind: 'd1', ready: true, detail: 'D1' },
+      sandbox: { kind: 'worker-isolate', ready: true, detail: 'isolate' },
+      usage: { totalCalls: 0, tokensIn: 0, tokensOut: 0, byProvider: {} },
+    }),
+    'GET /api/admin/studio/brain': () => ({
+      masterSystemPrompt: '',
+      defaults: {},
+      globalMemory: [],
+    }),
+    'POST /api/admin/studio/provider-key': ({ body }) => ({
+      ok: true,
+      provider: body.provider,
+      saved: true,
+      masked: 'sk-or-v1...9999',
+    }),
   };
 }
 
@@ -147,7 +181,7 @@ describe('NOVA web UI', () => {
 
     render(<App />);
     expect(await screen.findByText(/لا يوجد مزوّد يمكن الوصول إليه/)).toBeTruthy();
-    expect(screen.getByRole('button', { name: /المزوّدون/ })).toBeTruthy();
+    expect(screen.getAllByRole('button', { name: /الإعدادات/ }).length).toBeGreaterThan(0);
   });
 
   it('switches to English LTR and persists the preference server-side', async () => {
@@ -325,25 +359,53 @@ describe('NOVA web UI', () => {
     expect(api.bodyOf('/api/agent/run')).toMatchObject({ projectId: 'prj_1', prompt: 'غيّر القيمة إلى 43', autoApply: false });
   });
 
-  it('saves a free OpenRouter key directly from Settings → Providers without touching .env', async () => {
+  it('authenticates owner into NOVA Studio and saves a free OpenRouter key securely', async () => {
+    const ownerUser = {
+      id: 'u_owner',
+      email: 'yousifalhooti23@gmail.com',
+      displayName: 'Yousif',
+      role: 'owner' as const,
+      createdAt: '2026-10-30T00:00:00.000Z',
+      quota: { used: 0, limit: 1000, remaining: 1000, unlimited: true, locked: false, lockedUntil: null },
+    };
+
     api = installApiMock({
       ...defaultRoutes(),
+      'GET /api/auth/me': () => ({
+        authenticated: true,
+        user: ownerUser,
+        token: 'sess_test_123',
+      }),
       'GET /api/health': () => fx.health({ providers: [{ ...fx.workersAiProvider }, { ...fx.openrouterProvider }] }),
     });
 
-    render(<App />);
-    const bannerBtn = await screen.findByRole('button', { name: 'المزوّدون' });
-    await userEvent.click(bannerBtn);
+    useAppStore.setState({ authUser: ownerUser });
 
-    expect(await screen.findByText(/وضع مجاني 100%/)).toBeTruthy();
+    render(<App />);
+
+    // Click owner's NOVA Studio entry button
+    const studioBtns = await screen.findAllByRole('button', { name: /مركز القيادة/ });
+    await userEvent.click(studioBtns[0]);
+
+    // Studio Auth Gate is shown
+    expect(await screen.findByText(/NOVA Studio — مركز القيادة والمراقبة/)).toBeTruthy();
+    const pwInput = await screen.findByPlaceholderText(/••••••••••••••••/);
+    await userEvent.type(pwInput, 'Nova#Yousif!8nqENmQGI6');
+
+    const enterBtn = await screen.findByRole('button', { name: /دخول مركز القيادة/ });
+    await userEvent.click(enterBtn);
+
+    // Now inside Studio Dashboard
+    expect(await screen.findByText(/المزوّدون والمؤشرات/)).toBeTruthy();
+
     const inputs = await screen.findAllByPlaceholderText(/sk-or-v1/);
     await userEvent.type(inputs[0], 'sk-or-v1-freekey9999');
 
-    const saveButtons = screen.getAllByRole('button', { name: /حفظ وتفعيل فوراً/ });
+    const saveButtons = screen.getAllByRole('button', { name: /حفظ وتفعيل/ });
     await userEvent.click(saveButtons[0]);
 
     await waitFor(() => {
-      const call = api.callsTo('/api/settings/provider-keys').find((c) => c.method === 'POST');
+      const call = api.callsTo('/api/admin/studio/provider-key').find((c) => c.method === 'POST');
       expect(call?.body).toMatchObject({ provider: 'openrouter', apiKey: 'sk-or-v1-freekey9999' });
     });
   });

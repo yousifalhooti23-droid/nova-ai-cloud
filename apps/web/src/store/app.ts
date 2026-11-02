@@ -5,8 +5,8 @@ import type { Locale } from '@/i18n';
 
 declare const __NOVA_BUILD_VERSION__: string | undefined;
 
-export type View = 'chat' | 'code';
-export type SettingsTabId = 'general' | 'account' | 'providers' | 'agent' | 'storage';
+export type View = 'chat' | 'code' | 'studio';
+export type SettingsTabId = 'general' | 'account';
 
 export interface Toast {
   id: string;
@@ -24,6 +24,8 @@ interface Prefs {
   editorFontSize: number;
   editorWrap: boolean;
   diffMode: 'unified' | 'side';
+  theme: 'dark' | 'light';
+  soundEffects: boolean;
 }
 
 function loadPrefs(): Prefs {
@@ -34,6 +36,8 @@ function loadPrefs(): Prefs {
     editorFontSize: 13,
     editorWrap: false,
     diffMode: 'unified',
+    theme: 'dark',
+    soundEffects: true,
   };
   try {
     const raw = localStorage.getItem(LS_KEY);
@@ -371,6 +375,8 @@ function pickPrefs(s: AppState): Prefs {
     editorFontSize: s.editorFontSize,
     editorWrap: s.editorWrap,
     diffMode: s.diffMode,
+    theme: s.theme,
+    soundEffects: s.soundEffects,
   };
 }
 

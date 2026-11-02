@@ -9,6 +9,7 @@ import { HttpError, ProviderNotConfiguredError } from '../lib/errors.js';
 import type { Logger } from '../lib/log.js';
 import type { Store } from '../storage/types.js';
 import { buildAdapters } from './registry.js';
+import { telemetry } from '../lib/telemetry.js';
 import type { CompletionRequest, CompletionResult, ProviderAdapter, ResolutionResult, ResolveOptions, StreamHandlers } from './types.js';
 
 /**
@@ -291,6 +292,7 @@ export class ModelRouter {
           )
           .sort((a, b) => this.score(b, cfg, { requireTools: Boolean(req.tools?.length) }) - this.score(a, cfg, { requireTools: Boolean(req.tools?.length) }))[0];
         if (alt) {
+          const failoverReason = `Switched from ${resolution.model.label} (${resolution.model.provider}) to ${alt.label} (${alt.provider}): ${err instanceof Error ? err.message : String(err)}`;
           this.log.info('retrying completion on fallback free model', { from: resolution.model.id, to: alt.id });
           resolution = {
             model: alt,
@@ -302,13 +304,52 @@ export class ModelRouter {
           if (!result.text?.trim() && (!result.toolCalls || result.toolCalls.length === 0)) {
             throw new HttpError(502, `Fallback model "${alt.label}" returned empty output.`, 'upstream_empty');
           }
+          telemetry.record({
+            kind: usageKind,
+            modelRequested: req.modelId ?? undefined,
+            modelResolved: alt.id,
+            providerResolved: alt.provider,
+            status: 'failover',
+            latencyMs: Date.now() - started,
+            tokensIn: result.tokensIn,
+            tokensOut: result.tokensOut,
+            failoverReason,
+          });
         } else {
+          telemetry.record({
+            kind: usageKind,
+            modelRequested: req.modelId ?? undefined,
+            modelResolved: resolution.model.id,
+            providerResolved: resolution.model.provider,
+            status: 'error',
+            latencyMs: Date.now() - started,
+            error: err instanceof Error ? err.message : String(err),
+          });
           throw err;
         }
       } else {
+        telemetry.record({
+          kind: usageKind,
+          modelRequested: req.modelId ?? undefined,
+          modelResolved: resolution.model.id,
+          providerResolved: resolution.model.provider,
+          status: 'error',
+          latencyMs: Date.now() - started,
+          error: err instanceof Error ? err.message : String(err),
+        });
         throw err;
       }
     }
+    telemetry.record({
+      kind: usageKind,
+      modelRequested: req.modelId ?? undefined,
+      modelResolved: resolution.model.id,
+      providerResolved: resolution.model.provider,
+      status: 'success',
+      latencyMs: Date.now() - started,
+      tokensIn: result.tokensIn,
+      tokensOut: result.tokensOut,
+    });
     await this.store
       .recordUsage({
         provider: resolution.model.provider,

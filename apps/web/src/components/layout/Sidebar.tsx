@@ -212,27 +212,35 @@ export function Sidebar() {
             </div>
           ) : null}
 
-          {!isCollapsedDesktop && (
+          {!isCollapsedDesktop && authUser?.role === 'owner' && (
             <button
               type="button"
               onClick={() => {
-                openSettings(true);
+                setView('studio');
                 setMobileOpen(false);
               }}
-              className="card-hover mb-1.5 flex w-full items-center gap-2 rounded-lg border border-line px-2 py-1.5 text-start"
-              title={t('nav.health')}
+              className="card-hover mb-1.5 flex w-full items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-2.5 py-1.5 text-start text-amber-300 transition-colors hover:bg-amber-500/20"
+              title="NOVA Studio — مركز القيادة والمراقبة"
             >
-              <Dot tone={offline ? 'danger' : readyProviders.length ? 'success' : 'warning'} pulse={!offline && readyProviders.length > 0} />
-              <span className="min-w-0 flex-1 truncate text-[11.5px] text-muted">
-                {offline
-                  ? t('health.offline')
-                  : readyProviders.length
-                    ? readyProviders.map((p) => p.label).join(' · ')
-                    : t('providers.noCallable')}
+              <Crown size={14} className="shrink-0 text-amber-400" />
+              <span className="min-w-0 flex-1 truncate text-[12px] font-semibold">
+                {isAr ? '👑 مركز القيادة (Studio)' : '👑 NOVA Studio'}
               </span>
             </button>
           )}
           <div className={cn('flex items-center gap-1', isCollapsedDesktop && 'flex-col')}>
+            {authUser?.role === 'owner' && isCollapsedDesktop ? (
+              <IconButton
+                label={isAr ? 'مركز القيادة (Studio)' : 'NOVA Studio'}
+                onClick={() => {
+                  setView('studio');
+                  setMobileOpen(false);
+                }}
+                className="w-full text-amber-400 hover:text-amber-300"
+              >
+                <Crown size={15} />
+              </IconButton>
+            ) : null}
             <IconButton
               label={t('nav.settings')}
               onClick={() => {

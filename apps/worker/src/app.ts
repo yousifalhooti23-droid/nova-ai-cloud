@@ -16,6 +16,7 @@ import { registerProjectRoutes } from './routes/projects.js';
 import { registerSandboxRoutes } from './routes/sandbox.js';
 import { registerStudioRoutes } from './routes/studio.js';
 import { registerSkillsRoutes } from './routes/skills.js';
+import { registerAdminStudioRoutes } from './routes/admin-studio.js';
 import { ScopedStore } from './storage/scoped-store.js';
 
 const PUBLIC_AUTH_PATHS = new Set([
@@ -28,6 +29,7 @@ const PUBLIC_AUTH_PATHS = new Set([
   '/api/auth/resend-otp',
   '/api/auth/google',
   '/api/auth/logout',
+  '/api/admin/studio/auth',
 ]);
 
 function isAllowedOrigin(origin: string | undefined, configuredAllowed: string[], userAuthEnabled: boolean): boolean {
@@ -237,6 +239,7 @@ export function createApp(deps: AppDeps) {
   registerSandboxRoutes(app);
   registerStudioRoutes(app);
   registerSkillsRoutes(app);
+  registerAdminStudioRoutes(app);
   registerMiscRoutes(app);
 
   return app;

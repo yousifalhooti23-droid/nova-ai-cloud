@@ -95,6 +95,15 @@ if (!dbId) {
 }
 
 if (!dbId) {
+  try {
+    const wranglerCfgPath = path.join(workerDir, 'wrangler.jsonc');
+    const existing = readFileSync(wranglerCfgPath, 'utf8');
+    const match = existing.match(/"database_id"\s*:\s*"([0-9a-f-]{36})"/i);
+    if (match) dbId = match[1];
+  } catch { /* ignore */ }
+}
+
+if (!dbId) {
   console.error('❌ Could not resolve D1 database UUID for `nova-db`.');
   process.exit(1);
 }

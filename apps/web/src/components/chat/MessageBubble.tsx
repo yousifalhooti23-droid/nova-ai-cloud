@@ -323,9 +323,9 @@ function ErrorMessageContent({ message }: { message: ChatMessage }) {
               size="sm"
               variant="outline"
               icon={<KeyRound size={12} />}
-              onClick={() => openSettings(true, 'providers')}
+              onClick={() => openSettings(true)}
             >
-              {t('chat.openProvidersBtn')}
+              {t('settings.title')}
             </Button>
           </div>
         ) : null}

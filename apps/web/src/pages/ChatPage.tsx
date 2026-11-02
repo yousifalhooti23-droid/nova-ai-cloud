@@ -40,6 +40,7 @@ export function ChatPage() {
   const setView = useAppStore((s) => s.setView);
   const selectProject = useCodeStore((s) => s.selectProject);
   const health = useAppStore((s) => s.health);
+  const authUser = useAppStore((s) => s.authUser);
   const openSettings = useAppStore((s) => s.openSettings);
   const setMobileSidebarOpen = useAppStore((s) => s.setMobileSidebarOpen);
   const isMobile = useMediaQuery('(max-width: 859px)');
@@ -223,9 +224,15 @@ export function ChatPage() {
         <div className="flex items-center gap-2 border-b border-warning/25 bg-warning/8 px-4 py-2">
           <AlertTriangle size={14} className="shrink-0 text-warning" />
           <p className="min-w-0 flex-1 text-[12px] text-warning">{t('chat.providerIssue')}</p>
-          <Button size="sm" variant="outline" onClick={() => openSettings(true, 'providers')}>
-            {t('settings.providers')}
-          </Button>
+          {authUser?.role === 'owner' ? (
+            <Button size="sm" variant="outline" onClick={() => setView('studio')}>
+              {locale === 'ar' ? 'مركز القيادة (Studio)' : 'NOVA Studio'}
+            </Button>
+          ) : (
+            <Button size="sm" variant="outline" onClick={() => openSettings(true)}>
+              {t('settings.title')}
+            </Button>
+          )}
         </div>
       ) : null}
 
@@ -241,9 +248,15 @@ export function ChatPage() {
                   ? t('chat.rateLimitedFriendly')
                   : streaming.error}
           </p>
-          <Button size="sm" variant="ghost" onClick={() => openSettings(true, 'providers')}>
-            {t('nav.health')}
-          </Button>
+          {authUser?.role === 'owner' ? (
+            <Button size="sm" variant="ghost" onClick={() => setView('studio')}>
+              {locale === 'ar' ? 'مركز القيادة (Studio)' : 'NOVA Studio'}
+            </Button>
+          ) : (
+            <Button size="sm" variant="ghost" onClick={() => openSettings(true)}>
+              {t('settings.title')}
+            </Button>
+          )}
         </div>
       ) : null}
 
