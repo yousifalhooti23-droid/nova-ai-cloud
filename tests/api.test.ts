@@ -589,7 +589,7 @@ describe('multimedia uploads (video + HTTP Range) & cloud creative studio', () =
     });
     expect(imgRes.status).toBe(201);
     const imgBody = (await json(imgRes)) as import('@nova/shared').StudioImageResponse;
-    expect(imgBody.provider).toBe('workers-ai-flux');
+    expect(imgBody.provider).toMatch(/workers-ai-flux/);
     expect(imgBody.attachment.url).toMatch(/^\/api\/uploads\/att_/);
     expect(imgBody.markdown).toContain(imgBody.attachment.url);
     expect(imgBody.markdown).toContain('ملصق إعلاني وتصميم جرافيك');

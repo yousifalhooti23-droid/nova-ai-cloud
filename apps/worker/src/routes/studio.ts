@@ -45,7 +45,7 @@ export function registerStudioRoutes(app: Hono<AppEnv>) {
 
 function clampDim(n: number): number {
   if (!Number.isFinite(n)) return 1024;
-  return Math.min(Math.max(Math.round(n / 64) * 64, 256), 1280);
+  return Math.min(Math.max(Math.round(n / 64) * 64, 256), 1536);
 }
 
 function hasArabic(text: string): boolean {
@@ -251,10 +251,15 @@ export async function generateCloudImage(
   let provider = 'workers-ai-flux';
   let lastErr = '';
 
-  // 1. Primary Image Generator: Cloudflare Workers AI (FLUX -> SDXL-Lightning)
+  // 1. Primary Image Generator: Cloudflare Workers AI (FLUX.2 -> FLUX-1 -> SDXL-Lightning)
   if (d.env.AI) {
     const ai = d.env.AI as { run(model: string, params: Record<string, unknown>): Promise<unknown> };
     const candidates: { id: string; model: string; params: Record<string, unknown> }[] = [
+      {
+        id: 'workers-ai-flux-2',
+        model: '@cf/black-forest-labs/flux-2',
+        params: { prompt: promptUsed, steps: 8, width, height },
+      },
       {
         id: 'workers-ai-flux',
         model: '@cf/black-forest-labs/flux-1-schnell',
@@ -319,13 +324,17 @@ export async function generateCloudImage(
     }
   }
 
-  // 3. Upgraded Fallback Image Generator: Pollinations FLUX Pro Configuration
+  // 3. Upgraded Fallback Image Generator: Pollinations FLUX.2 & FLUX Pro Configuration
   if (!imageBytes || imageBytes.byteLength < 256) {
     const randomSeed = Math.floor(Math.random() * 2147483647);
+    const flux2Url = `https://image.pollinations.ai/prompt/${encodeURIComponent(promptUsed)}?model=flux-2&width=${width}&height=${height}&nologo=true&enhance=false&seed=${randomSeed}&negative=${encodeURIComponent(negativePrompt)}`;
+    const fluxRealismUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(promptUsed)}?model=flux-realism&width=${width}&height=${height}&nologo=true&enhance=false&seed=${randomSeed}&negative=${encodeURIComponent(negativePrompt)}`;
     const fluxProUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(promptUsed)}?model=flux&width=${width}&height=${height}&nologo=true&enhance=false&seed=${randomSeed}&negative=${encodeURIComponent(negativePrompt)}`;
     const turboFallbackUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(promptUsed)}?model=turbo&width=${width}&height=${height}&nologo=true&enhance=false&seed=${randomSeed}`;
 
     const endpointsToTry = [
+      { url: flux2Url, provider: 'flux-2' },
+      { url: fluxRealismUrl, provider: 'flux-realism' },
       { url: fluxProUrl, provider: 'pollinations-flux-pro' },
       { url: turboFallbackUrl, provider: 'pollinations-turbo' },
     ];
