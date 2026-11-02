@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Film, Globe, Image as ImageIcon, MessageSquare, Paperclip, Puzzle, Send, Square, X } from 'lucide-react';
+import { Globe, Image as ImageIcon, MessageSquare, Paperclip, Puzzle, Send, Square, X } from 'lucide-react';
 import { useI18n } from '@/i18n';
 import { cn } from '@/lib/cn';
 import { estimateTokens, type ModelClass, type StudioMode } from '@nova/shared';
@@ -78,18 +78,15 @@ export function Composer({ projectId, onNeedProject }: { projectId?: string | nu
   const placeholder =
     composer.studioMode === 'image'
       ? t('studio.placeholder.image')
-      : composer.studioMode === 'video'
-        ? t('studio.placeholder.video')
-        : composer.studioMode === 'website'
-          ? t('studio.placeholder.website')
-          : projectId
-            ? t('chat.placeholderWithProject')
-            : t('chat.placeholder');
+      : composer.studioMode === 'website'
+        ? t('studio.placeholder.website')
+        : projectId
+          ? t('chat.placeholderWithProject')
+          : t('chat.placeholder');
 
   const modes: { id: StudioMode; label: string; icon: React.ReactNode }[] = [
     { id: 'chat', label: t('studio.mode.chat'), icon: <MessageSquare size={12} /> },
     { id: 'image', label: t('studio.mode.image'), icon: <ImageIcon size={12} /> },
-    { id: 'video', label: t('studio.mode.video'), icon: <Film size={12} /> },
     { id: 'website', label: t('studio.mode.website'), icon: <Globe size={12} /> },
   ];
 

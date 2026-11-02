@@ -1,21 +1,25 @@
 import type {
   StudioImageRequest,
   StudioImageResponse,
-  StudioVideoRequest,
-  StudioVideoResponse,
-  StudioVideoScene,
 } from '@nova/shared';
-import { newId, truncate } from '@nova/shared';
+import { newId } from '@nova/shared';
 import type { Hono } from 'hono';
 import type { AppDeps, AppEnv } from '../context.js';
 import { badRequest, HttpError } from '../lib/errors.js';
+import {
+  detectVisualArchetype,
+  detectVisualDimensions,
+  buildMasterVisualPrompt,
+  extractCleanSubject,
+  type VisualArchetype,
+} from '../ai/visual-director.js';
 
-const MOTIONS: StudioVideoScene['motion'][] = ['zoom-in', 'pan-left', 'zoom-out', 'pan-right'];
+export { detectVisualDimensions as detectImageDimensions };
 
 /**
  * Free Cloud Creative Studio routes:
- * - POST /api/studio/image -> 100% free cloud GPU image generation (Workers AI Flux -> Pollinations Sana)
- * - POST /api/studio/video -> 100% free cloud GPU multi-scene AI video storyboard & HD frame generation
+ * - POST /api/studio/image -> 100% free cloud GPU image generation with Visual Director (Workers AI Flux -> Pollinations Flux Pro)
+ * Note: Video generation has been completely removed to prevent useless server load and quota exhaustion.
  */
 export function registerStudioRoutes(app: Hono<AppEnv>) {
   app.post('/api/studio/image', async (c) => {
@@ -31,25 +35,6 @@ export function registerStudioRoutes(app: Hono<AppEnv>) {
       prompt: req.prompt.trim(),
       width: req.width !== undefined ? clampDim(req.width) : undefined,
       height: req.height !== undefined ? clampDim(req.height) : undefined,
-      conversationId: req.conversationId ?? null,
-      projectId: req.projectId ?? null,
-      signal: c.req.raw.signal,
-    });
-    return c.json(res, 201);
-  });
-
-  app.post('/api/studio/video', async (c) => {
-    const d = c.get('deps');
-    const req = (await c.req.json().catch(() => null)) as StudioVideoRequest | null;
-    if (!req || typeof req.prompt !== 'string' || !req.prompt.trim()) {
-      throw badRequest('prompt is required', 'bad_prompt');
-    }
-    if (d.currentUser) {
-      await d.auth.consumeQuota(d.currentUser.id, 4);
-    }
-    const res = await generateCloudVideo(d, {
-      prompt: req.prompt.trim(),
-      locale: req.locale,
       conversationId: req.conversationId ?? null,
       projectId: req.projectId ?? null,
       signal: c.req.raw.signal,
@@ -97,96 +82,44 @@ async function streamToBytes(stream: ReadableStream<Uint8Array>): Promise<Uint8A
 }
 
 const IMAGE_PREFIX_RE =
-  /^(ارسم(?:\s+لي)?|انشئ\s+صور[ةه]|أنشئ\s+صور[ةه]|انشاء\s+صور[ةه]|إنشاء\s+صور[ةه]|ولد\s+صور[ةه]|ولّد\s+صور[ةه]|صمم\s+صور[ةه]|ابغى\s+صور[ةه]|أريد\s+صور[ةه]|اريد\s+صور[ةه]|سوي(?:\s+لي)?\s+صور[ةه]|اصنع\s+صور[ةه]|اعمل\s+صور[ةه]|صور[ةه](?:\s+عن|\s+لـ|\s+حول)?|create an? image(?:\s+of)?|generate an? image(?:\s+of)?|draw)\s*/i;
-
-const VIDEO_PREFIX_RE =
-  /^(انشئ\s+(?:فيديو|فديو|قديو)|أنشئ\s+(?:فيديو|فديو|قديو)|انشاء\s+(?:فيديو|فديو|قديو)|إنشاء\s+(?:فيديو|فديو|قديو)|صمم\s+(?:فيديو|فديو|قديو)|اصنع\s+(?:فيديو|فديو|قديو)|ولد\s+(?:فيديو|فديو|قديو)|ولّد\s+(?:فيديو|فديو|قديو)|سوي(?:\s+لي)?\s+(?:فيديو|فديو|قديو)|ابغى\s+(?:فيديو|فديو|قديو)|أريد\s+(?:فيديو|فديو|قديو)|اريد\s+(?:فيديو|فديو|قديو)|اعمل(?:\s+لي)?\s+(?:فيديو|فديو|قديو)|(?:فيديو|فديو|قديو)(?:\s+عن|\s+حول|\s+لـ)?|create a video(?:\s+about|\s+of)?|generate a video(?:\s+about|\s+of)?|make a video(?:\s+about|\s+of)?)\s*/i;
-
-/**
- * Automatically detects aspect ratio from keywords in the prompt:
- * - "vertical" / "poster" / "portrait" -> 768 x 1024
- * - "horizontal" / "landscape" / "widescreen" -> 1024 x 768
- * - default -> 1024 x 1024
- */
-export function detectImageDimensions(
-  prompt: string,
-  requestedWidth?: number,
-  requestedHeight?: number,
-): { width: number; height: number; aspect: 'square' | 'vertical' | 'horizontal' } {
-  // Respect explicit non-default dimensions passed from client options
-  if (
-    requestedWidth &&
-    requestedHeight &&
-    (requestedWidth !== 1024 || requestedHeight !== 1024)
-  ) {
-    const w = clampDim(requestedWidth);
-    const h = clampDim(requestedHeight);
-    return {
-      width: w,
-      height: h,
-      aspect: h > w ? 'vertical' : w > h ? 'horizontal' : 'square',
-    };
-  }
-
-  const p = prompt.toLowerCase();
-
-  // Vertical / Poster aspect keywords: 768 x 1024
-  if (
-    /(?:vertical|poster|portrait|phone|wallpaper|story|stories|tall|mobile|عمودي|طولي|بوستر|ستوري|خلفية\s+جوال|غلاف|ريلز|تيك\s*توك)/i.test(p)
-  ) {
-    return { width: 768, height: 1024, aspect: 'vertical' };
-  }
-
-  // Horizontal / Landscape aspect keywords: 1024 x 768
-  if (
-    /(?:horizontal|landscape|widescreen|wide|banner|desktop|youtube|16:9|4:3|أفقي|عرضي|عريض|بانر|شاشة\s+عريضة|ديسك\s*توب|يوتيوب)/i.test(p)
-  ) {
-    return { width: 1024, height: 768, aspect: 'horizontal' };
-  }
-
-  // Default square: 1024 x 1024
-  return { width: 1024, height: 1024, aspect: 'square' };
-}
+  /^(ارسم(?:\s+لي)?|انشئ\s+صور[ةه]|أنشئ\s+صور[ةه]|انشاء\s+صور[ةه]|إنشاء\s+صور[ةه]|ولد\s+صور[ةه]|ولّد\s+صور[ةه]|صمم\s+صور[ةه]|صمم\s+بوستر|ابغى\s+صور[ةه]|أريد\s+صور[ةه]|اريد\s+صور[ةه]|سوي(?:\s+لي)?\s+صور[ةه]|اصنع\s+صور[ةه]|اعمل\s+صور[ةه]|صور[ةه](?:\s+عن|\s+لـ|\s+حول)?|create an? image(?:\s+of)?|generate an? image(?:\s+of)?|draw)\s*/i;
 
 /**
  * Clean and normalize image prompts:
- * - Strips command prefixes ("صمم لي صورة", "generate an image", etc.)
- * - Strips attached filename noise ("WhatsApp Image...", "att_123...")
- * - Replaces newlines (\r\n, \r, \n), tabs, and multiple spaces with single spaces
- * - NEVER truncates multi-line descriptions of typography, composition, or lighting.
+ * - Strips command prefixes
+ * - Strips attached filename noise
+ * - Replaces newlines (\r\n, \r, \n) and tabs with spaces to preserve full descriptions
  */
 export function cleanAndSanitizeImagePrompt(raw: string): string {
   let p = raw.trim();
   p = p.replace(IMAGE_PREFIX_RE, '').trim();
   p = p.replace(/(?:WhatsApp Image|image|photo|att_)[^\n\r]*\.(?:jpeg|jpg|png|webp|gif)/gi, ' ');
-  p = p.replace(/\[(?:Attached\s+video\s+file|attached\s+file)[^\]]*\]/gi, ' ');
-  // Replace newlines, line breaks, and tabs with spaces to preserve full descriptions
+  p = p.replace(/\[(?:Attached\s+file|attached)[^\]]*\]/gi, ' ');
   p = p.replace(/[\r\n\t]+/g, ' ');
   p = p.replace(/\s{2,}/g, ' ').trim();
   return p.length >= 2 ? p : 'cinematic artistic masterpiece, dramatic studio lighting, 8k render';
 }
 
 /**
- * Translates and expands Arabic prompts into crisp, domain-specific visual descriptions.
+ * Translates and expands Arabic visual subjects into crisp, domain-specific visual descriptions.
  * Preserves all fine details (typography, specular highlights, object placement).
  */
 async function translateVisualSubject(d: AppDeps, cleanText: string): Promise<string> {
   const text = cleanText.trim();
   if (!text) return 'cinematic visual showcase with professional lighting';
 
-  // If purely English or substantial English text, keep as-is with zero compression
-  const englishCount = (text.match(/[a-zA-Z]/g) || []).length;
-  if (!hasArabic(text) || englishCount > 25) {
+  // If purely English with no Arabic, keep as-is with zero compression
+  if (!hasArabic(text)) {
     return text;
   }
 
-  // 1. Try fast LLM translation preserving ALL details, typography, and composition
+  // 1. Fast LLM translation preserving ALL details, typography, and composition
   const hasReadyLlm = d.router.providerInfos().some((p) => p.status === 'ready' && p.id !== 'diagnostic');
   if (hasReadyLlm) {
     try {
       const resolved = await d.router.resolve({ modelClass: 'chat' });
       const ac = new AbortController();
-      const timer = setTimeout(() => ac.abort(), 12000);
+      const timer = setTimeout(() => ac.abort(), 10000);
       try {
         const out = await d.router.complete(
           {
@@ -199,7 +132,7 @@ async function translateVisualSubject(d: AppDeps, cleanText: string): Promise<st
               {
                 role: 'system',
                 content:
-                  'Translate this Arabic visual description into a detailed, high-fidelity English visual prompt for FLUX image generation. Preserve all typography, objects, lighting, colors, layout, and composition. Output ONLY the English translation without quotes, notes, or commentary.',
+                  'Translate this Arabic visual description into a detailed, high-fidelity English visual subject for FLUX image generation. Preserve all typography names, brand names, objects, lighting, colors, layout, and composition. Output ONLY the English translation without quotes, notes, or commentary.',
               },
               { role: 'user', content: text },
             ],
@@ -208,7 +141,7 @@ async function translateVisualSubject(d: AppDeps, cleanText: string): Promise<st
           'chat',
         );
         const candidate = out.text.replace(/^["'`]+|["'`]+$/g, '').trim();
-        if (candidate.length >= 8 && !hasArabic(candidate)) {
+        if (candidate.length >= 5 && !hasArabic(candidate)) {
           return candidate;
         }
       } finally {
@@ -226,6 +159,9 @@ async function translateVisualSubject(d: AppDeps, cleanText: string): Promise<st
   if (/عطر|عطور|بخور|لبان|دخون/i.test(low)) {
     descriptors.push('luxury artisanal perfume bottles, swirling aromatic frankincense smoke, warm amber glass, opulent oriental fragrance presentation');
   }
+  if (/سوني|بلايستيشن|playstation|يد\s+تحكم/i.test(low)) {
+    descriptors.push('official Sony PlayStation 5 DualSense wireless controller, sleek ergonomic industrial design, illuminated LED accents, clean geometric pedestal');
+  }
   if (/قهو[ةه]|كافيه|شاي|مقهى|اسبريسو/i.test(low)) {
     descriptors.push('specialty artisan roasted coffee brewing, pouring rich espresso, aromatic steam, warm rustic coffeehouse lighting');
   }
@@ -235,20 +171,11 @@ async function translateVisualSubject(d: AppDeps, cleanText: string): Promise<st
   if (/عمان|عماني|عُمان|مسقط|صلالة|نزوى/i.test(low)) {
     descriptors.push('authentic Sultanate of Oman cultural architecture, historic clay fortresses, majestic desert dunes, turquoise Arabian Sea coastline');
   }
-  if (/متجر|محل|دكان|سوق|منتجات|تسوق/i.test(low)) {
-    descriptors.push('elegant boutique retail store showcase, beautifully arranged premium products, warm ambient architectural lighting');
-  }
   if (/طبيعة|جبل|جبال|وادي|بحر|شاطئ|رمال|صحراء/i.test(low)) {
     descriptors.push('majestic natural landscape, rugged mountain peaks, golden sand dunes, dramatic sky with atmospheric volumetric lighting');
   }
   if (/طعام|مطعم|أكل|طبخ|شيف|وجب[ةه]|برجر/i.test(low)) {
     descriptors.push('gourmet culinary masterpiece, appetizing fresh food plating, artisan kitchen, warm fine dining atmosphere');
-  }
-  if (/تقني[ةه]|تكنولوجيا|روبوت|ذكاء\s*اصطناعي|مستقبل|برمج/i.test(low)) {
-    descriptors.push('advanced futuristic technology showcase, glowing holographic interface, clean glass architecture, cybernetic aesthetic');
-  }
-  if (/حصان|خيل|صقر|جمل|جمال|نمر|أسد|حيوان/i.test(low)) {
-    descriptors.push('majestic noble Arabian animal portrait, golden sunlight highlights, powerful stance, expressive cinematic depth');
   }
   if (/فضاء|كواكب|نجوم|مجرة|فلك/i.test(low)) {
     descriptors.push('deep cosmic nebula, vibrant stellar clouds, distant celestial planets, awe-inspiring galaxy vista');
@@ -259,22 +186,6 @@ async function translateVisualSubject(d: AppDeps, cleanText: string): Promise<st
   }
 
   return `${text.replace(/[^\w\s\u0600-\u06FF]/g, ' ').trim()}, vivid cinematic aesthetic, dramatic lighting, ultra detailed 8k`;
-}
-
-/**
- * Prepares the visual prompt:
- * Replaces newlines with spaces, cleans noise, and preserves full descriptions without truncating.
- */
-async function refineVisualPrompt(d: AppDeps, rawPrompt: string, skipEnhance = false): Promise<string> {
-  const clean = cleanAndSanitizeImagePrompt(rawPrompt);
-  if (skipEnhance) return clean;
-
-  const englishCount = (clean.match(/[a-zA-Z]/g) || []).length;
-  if (!hasArabic(clean) || englishCount > 25) {
-    return clean;
-  }
-
-  return translateVisualSubject(d, clean);
 }
 
 async function runWorkersAiImageModel(
@@ -314,10 +225,26 @@ export async function generateCloudImage(
     signal?: AbortSignal;
   },
 ): Promise<StudioImageResponse> {
-  const dim = detectImageDimensions(opts.prompt, opts.width, opts.height);
-  const width = dim.width;
-  const height = dim.height;
-  const promptUsed = await refineVisualPrompt(d, opts.prompt, opts.skipEnhance);
+  const archetype = detectVisualArchetype(opts.prompt);
+  const dim = detectVisualDimensions(opts.prompt, opts.width, opts.height);
+  const width = clampDim(dim.width);
+  const height = clampDim(dim.height);
+
+  let promptUsed: string;
+  let negativePrompt: string;
+
+  if (!opts.skipEnhance) {
+    let cleanSubject = extractCleanSubject(opts.prompt);
+    if (hasArabic(cleanSubject)) {
+      cleanSubject = await translateVisualSubject(d, cleanSubject);
+    }
+    const recipe = buildMasterVisualPrompt(cleanSubject, archetype, dim.aspect);
+    promptUsed = recipe.prompt;
+    negativePrompt = recipe.negative;
+  } else {
+    promptUsed = cleanAndSanitizeImagePrompt(opts.prompt);
+    negativePrompt = 'blurry, deformed, low quality, artifacts';
+  }
 
   let imageBytes: Uint8Array | null = null;
   let mime = 'image/jpeg';
@@ -336,12 +263,12 @@ export async function generateCloudImage(
       {
         id: 'workers-ai-sdxl-lightning',
         model: '@cf/bytedance/stable-diffusion-xl-lightning',
-        params: { prompt: promptUsed, width, height, num_steps: 4 },
+        params: { prompt: promptUsed, width, height, num_steps: 4, negative_prompt: negativePrompt },
       },
       {
         id: 'workers-ai-sdxl',
         model: '@cf/stabilityai/stable-diffusion-xl-base-1.0',
-        params: { prompt: promptUsed, width, height, num_steps: 12 },
+        params: { prompt: promptUsed, width, height, num_steps: 12, negative_prompt: negativePrompt },
       },
     ];
 
@@ -393,10 +320,9 @@ export async function generateCloudImage(
   }
 
   // 3. Upgraded Fallback Image Generator: Pollinations FLUX Pro Configuration
-  // NEVER use bare default URL. Always specify model=flux, width, height, nologo=true, enhance=false, and random seed.
   if (!imageBytes || imageBytes.byteLength < 256) {
     const randomSeed = Math.floor(Math.random() * 2147483647);
-    const fluxProUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(promptUsed)}?model=flux&width=${width}&height=${height}&nologo=true&enhance=false&seed=${randomSeed}`;
+    const fluxProUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(promptUsed)}?model=flux&width=${width}&height=${height}&nologo=true&enhance=false&seed=${randomSeed}&negative=${encodeURIComponent(negativePrompt)}`;
     const turboFallbackUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(promptUsed)}?model=turbo&width=${width}&height=${height}&nologo=true&enhance=false&seed=${randomSeed}`;
 
     const endpointsToTry = [
@@ -458,151 +384,31 @@ export async function generateCloudImage(
     size: record.size,
     url: record.url,
   };
-  const aspectLabel = dim.aspect === 'vertical' ? 'طولي / Poster (768×1024)' : dim.aspect === 'horizontal' ? 'عرضي / Landscape (1024×768)' : 'مربع / Square (1024×1024)';
+
+  const archetypeLabels: Record<VisualArchetype, string> = {
+    graphic_poster: '🖼️ ملصق إعلاني وتصميم جرافيك (Graphic Poster)',
+    photorealistic_portrait: '📸 تصوير وبورتريه واقعي (Hasselblad Realism)',
+    commercial_product: '💎 استوديو منتجات تجاري (Octane 3D Studio)',
+    architectural_interior: '🏛️ تصميم معماري وديكور (Architectural Digest)',
+    cinematic_landscape: '🌄 مشهد سينمائي طبيعي (Cinematic 8K)',
+    creative_general: '🎨 تحفة بصرية فنية (Masterpiece)',
+  };
+
+  const aspectLabel =
+    dim.aspect === 'vertical'
+      ? `طولي / Poster (${width}×${height})`
+      : dim.aspect === 'horizontal'
+        ? `عرضي / Landscape (${width}×${height})`
+        : `مربع / Square (${width}×${height})`;
+
   const cleanAlt = opts.prompt.replace(/[\[\]\r\n]+/g, ' ').trim().slice(0, 100);
-  const markdown = `![${cleanAlt}](${attachment.url})\n\n> 🎨 **المحرك:** \`${provider}\` · **الأبعاد:** \`${aspectLabel}\`\n> 📝 **الوصف:** ${promptUsed}`;
+  const markdown = `![${cleanAlt}](${attachment.url})\n\n> 🎯 **النمط:** ${archetypeLabels[archetype] ?? archetype}\n> 🎨 **المحرك:** \`${provider}\` · **الأبعاد:** \`${aspectLabel}\`\n> 📝 **الوصف المعزز:** ${promptUsed}`;
 
   return { attachment, promptUsed, provider, markdown };
 }
 
-interface PlannedVideo {
-  title: string;
-  scenes: { caption: string; visualPrompt: string }[];
-}
-
-async function planVideoStoryboard(d: AppDeps, rawPrompt: string, isAr: boolean): Promise<PlannedVideo> {
-  const stripped = rawPrompt.replace(VIDEO_PREFIX_RE, '').trim();
-  const clean = stripped.length >= 2 ? stripped : isAr ? 'رحلة سينمائية ملهمة ومبهرة' : 'Inspiring cinematic visual journey';
-
-  // Translate the subject to accurate English first so all scenes strictly revolve around the user's topic
-  const englishSubject = await translateVisualSubject(d, clean);
-
-  const hasReadyLlm = d.router.providerInfos().some((p) => p.status === 'ready' && p.id !== 'diagnostic');
-  if (hasReadyLlm) {
-    try {
-      const resolved = await d.router.resolve({ modelClass: 'chat' });
-      const ac = new AbortController();
-      const timer = setTimeout(() => ac.abort(), 22000);
-      try {
-        const out = await d.router.complete(
-          {
-            modelId: resolved.model.id,
-            stream: false,
-            maxTokens: 500,
-            temperature: 0.5,
-            signal: ac.signal,
-            messages: [
-              {
-                role: 'system',
-                content:
-                  `You are an award-winning cinematic video director. The user wants an AI video about: "${clean}" (Subject in English: "${englishSubject}"). ` +
-                  `Create a 4-scene video storyboard STRICTLY AND ONLY about this specific topic. Never invent an unrelated topic. ` +
-                  `Respond with STRICT JSON ONLY: {"title":"...","scenes":[{"caption":"...","visualPrompt":"..."}]} with exactly 4 scenes. ` +
-                  `"title": short engaging title in ${isAr ? 'Arabic' : 'English'}. ` +
-                  `"caption": 1 engaging spoken sentence in ${isAr ? 'Arabic' : 'English'} describing what happens in this scene. ` +
-                  `"visualPrompt": 25-35 words in English describing the exact visuals, subject (${englishSubject}), lighting, and 16:9 widescreen composition for image generation with no text.`,
-              },
-              { role: 'user', content: clean },
-            ],
-          },
-          {},
-          'chat',
-        );
-        const jsonMatch = out.text.match(/\{[\s\S]*\}/);
-        if (jsonMatch) {
-          const parsed = JSON.parse(jsonMatch[0]) as Partial<PlannedVideo>;
-          if (Array.isArray(parsed.scenes) && parsed.scenes.length >= 2) {
-            return {
-              title: (parsed.title || clean).slice(0, 80),
-              scenes: parsed.scenes.slice(0, 4).map((s) => ({
-                caption: String(s.caption || clean).slice(0, 140),
-                visualPrompt: String(
-                  s.visualPrompt || `Cinematic 16:9 widescreen shot of ${englishSubject}, dramatic volumetric lighting, 8k photorealistic`,
-                ),
-              })),
-            };
-          }
-        }
-      } finally {
-        clearTimeout(timer);
-      }
-    } catch {
-      // Fall back to subject-preserving deterministic storyboard below
-    }
-  }
-
-  // Guaranteed subject-preserving fallback matching the user's exact topic
-  return {
-    title: clean.slice(0, 70),
-    scenes: isAr
-      ? [
-          { caption: `مشهد افتتاحي: ${clean}`, visualPrompt: `Cinematic wide establishing shot of ${englishSubject}, golden hour lighting, dramatic atmosphere, ultra detailed 16:9` },
-          { caption: `لقطة مقربة تبرز تفاصيل وجوهر المشهد`, visualPrompt: `Detailed cinematic close-up shot of ${englishSubject}, shallow depth of field, rich textures, professional studio light` },
-          { caption: `زاوية حركية ديناميكية مفعمة بالحيوية`, visualPrompt: `Dynamic low-angle tracking shot of ${englishSubject}, vibrant atmosphere, dramatic perspective, 8k photorealistic` },
-          { caption: `المشهد الختامي البانورامي المؤثر`, visualPrompt: `Epic breathtaking panoramic finale shot of ${englishSubject}, cinematic color grading, widescreen masterpiece` },
-        ]
-      : [
-          { caption: `Opening scene: ${clean}`, visualPrompt: `Cinematic wide establishing shot of ${englishSubject}, golden hour lighting, dramatic atmosphere, ultra detailed 16:9` },
-          { caption: `Detailed close-up capturing the essence`, visualPrompt: `Detailed cinematic close-up shot of ${englishSubject}, shallow depth of field, rich textures, professional studio light` },
-          { caption: `Dynamic motion and dramatic angle`, visualPrompt: `Dynamic low-angle tracking shot of ${englishSubject}, vibrant atmosphere, dramatic perspective, 8k photorealistic` },
-          { caption: `Grand breathtaking panoramic finale`, visualPrompt: `Epic breathtaking panoramic finale shot of ${englishSubject}, cinematic color grading, widescreen masterpiece` },
-        ],
-  };
-}
-
-export async function generateCloudVideo(
-  d: AppDeps,
-  opts: {
-    prompt: string;
-    locale?: 'ar' | 'en';
-    conversationId?: string | null;
-    projectId?: string | null;
-    signal?: AbortSignal;
-  },
-): Promise<StudioVideoResponse> {
-  const isAr = opts.locale ? opts.locale === 'ar' : hasArabic(opts.prompt);
-  const plan = await planVideoStoryboard(d, opts.prompt, isAr);
-
-  // Render in pairs of 2 using fast cloud GPU mode (SDXL-Lightning -> Flux) for ~3s total latency & zero rate-limit bursts
-  const generated: (StudioVideoScene & { provider: string })[] = [];
-  for (let i = 0; i < plan.scenes.length; i += 2) {
-    const batch = plan.scenes.slice(i, i + 2);
-    const batchResults = await Promise.all(
-      batch.map(async (scene, offset) => {
-        const idx = i + offset;
-        const img = await generateCloudImage(d, {
-          prompt: scene.visualPrompt,
-          width: 768,
-          height: 448,
-          conversationId: opts.conversationId,
-          projectId: opts.projectId,
-          skipEnhance: true,
-          fast: true,
-          signal: opts.signal,
-        });
-        return {
-          imageUrl: img.attachment.url,
-          attachmentId: img.attachment.id,
-          caption: scene.caption,
-          durationSec: 3.5,
-          motion: MOTIONS[idx % MOTIONS.length],
-          provider: img.provider,
-        };
-      }),
-    );
-    generated.push(...batchResults);
-  }
-
-  const provider = generated[0]?.provider ?? 'workers-ai-sdxl-lightning';
-  const scenes: StudioVideoScene[] = generated.map(({ provider: _p, ...rest }) => rest);
-  const payload = JSON.stringify({ title: plan.title, lang: isAr ? 'ar' : 'en', scenes });
-  const markdown = `\`\`\`nova-video\n${payload}\n\`\`\``;
-
-  return { title: plan.title, scenes, provider, markdown };
-}
-
-export function detectStudioIntent(message: string, explicitMode?: string): 'image' | 'video' | 'website' | null {
-  if (explicitMode === 'image' || explicitMode === 'video' || explicitMode === 'website') {
+export function detectStudioIntent(message: string, explicitMode?: string): 'image' | 'website' | null {
+  if (explicitMode === 'image' || explicitMode === 'website') {
     return explicitMode;
   }
   const m = message.trim();
@@ -611,12 +417,6 @@ export function detectStudioIntent(message: string, explicitMode?: string): 'ima
     /^(?:ارسم|draw\s|صورة\s+لـ|صورة\s+عن|بوستر\s+لـ|بوستر\s+عن|خريطة\s+عمان|خريطة\s+|create an? image|generate an? image)/i.test(m)
   ) {
     return 'image';
-  }
-  if (
-    /^(?:انشئ|أنشئ|انشاء|إنشاء|صمم|اصنع|ولد|ولّد|سوي|ابغى|أريد|اريد|اعمل)(?:\s+لي)?\s+(?:فيديو|فديو|قديو|storyboard|فيديو\s+قصير|مشهد)/i.test(m) ||
-    /^(?:create a video|generate a video|make a video)/i.test(m)
-  ) {
-    return 'video';
   }
   if (
     /^(?:صمم|انشئ|أنشئ|انشاء|إنشاء|سوي|ابني|اصنع|اريد|أريد|ابغى|اعمل)(?:\s+لي)?\s+(?:موقع|متجر|صفح[ةه]\s+ويب|بورتفوليو|dashboard|landing\s+page)/i.test(m) ||

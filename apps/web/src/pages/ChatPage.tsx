@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { ChatMessage } from '@nova/shared';
 import {
-  AlertTriangle, ArrowDown, Brain, Film, FolderKanban, Globe, Image as ImageIcon,
+  AlertTriangle, ArrowDown, Brain, FolderKanban, Globe, Image as ImageIcon,
   Lightbulb, Link2, Menu, MessageSquare, Pencil, Plus, Sparkles, Trash2, Unlink, X,
 } from 'lucide-react';
 import { useI18n } from '@/i18n';
@@ -271,7 +271,7 @@ export function ChatPage() {
             <p className="mt-1 sm:mt-1.5 max-w-md text-center text-[12px] sm:text-[12.5px] leading-relaxed text-dim">{t('chat.emptyHint')}</p>
 
             {/* Quick Creative Studio Launchers */}
-            <div className="mt-4 sm:mt-5 grid w-full max-w-xl grid-cols-3 gap-1.5 sm:gap-2">
+            <div className="mt-4 sm:mt-5 grid w-full max-w-xl grid-cols-2 gap-1.5 sm:gap-2">
               <button
                 type="button"
                 onClick={() => setComposer({ studioMode: 'image' })}
@@ -279,14 +279,6 @@ export function ChatPage() {
               >
                 <ImageIcon size={15} className="shrink-0 text-accent" />
                 <span className="truncate">{t('studio.mode.image')}</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setComposer({ studioMode: 'video' })}
-                className="card-hover flex flex-col sm:flex-row items-center justify-center sm:justify-start gap-1.5 sm:gap-2 rounded-xl border border-accent/25 bg-accent/5 px-2 py-2.5 sm:px-3 text-center sm:text-start text-[11.5px] sm:text-[12.5px] font-medium text-text"
-              >
-                <Film size={15} className="shrink-0 text-accent" />
-                <span className="truncate">{t('studio.mode.video')}</span>
               </button>
               <button
                 type="button"

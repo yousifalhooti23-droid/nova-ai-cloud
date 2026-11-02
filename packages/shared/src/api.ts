@@ -58,10 +58,9 @@ export const Endpoints = {
   localProviderKeys: `${API_PREFIX}/settings/provider-keys`,
   providerKeys: `${API_PREFIX}/admin/provider-keys`,
   studioImage: `${API_PREFIX}/studio/image`,
-  studioVideo: `${API_PREFIX}/studio/video`,
 } as const;
 
-export type StudioMode = 'chat' | 'image' | 'video' | 'website';
+export type StudioMode = 'chat' | 'image' | 'website';
 
 /* --------------------------------------------------------------- health */
 
@@ -226,28 +225,6 @@ export interface StudioImageRequest {
 export interface StudioImageResponse {
   attachment: AttachmentRef;
   promptUsed: string;
-  provider: string;
-  markdown: string;
-}
-
-export interface StudioVideoScene {
-  imageUrl: string;
-  attachmentId: string;
-  caption: string;
-  durationSec: number;
-  motion: 'zoom-in' | 'zoom-out' | 'pan-left' | 'pan-right';
-}
-
-export interface StudioVideoRequest {
-  prompt: string;
-  locale?: 'ar' | 'en';
-  conversationId?: string | null;
-  projectId?: string | null;
-}
-
-export interface StudioVideoResponse {
-  title: string;
-  scenes: StudioVideoScene[];
   provider: string;
   markdown: string;
 }

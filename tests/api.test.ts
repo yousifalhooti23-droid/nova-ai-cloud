@@ -567,7 +567,7 @@ describe('multimedia uploads (video + HTTP Range) & cloud creative studio', () =
     expect(slice[0]).toBe(100);
   });
 
-  it('generates free cloud AI images and multi-scene videos via Workers AI Flux binding', async () => {
+  it('generates free cloud AI images via Workers AI Flux binding with Visual Director', async () => {
     const fakeJpeg = new Uint8Array(600).fill(0xab);
     const fakeB64 = Buffer.from(fakeJpeg).toString('base64');
     const mockAi = {
@@ -585,26 +585,17 @@ describe('multimedia uploads (video + HTTP Range) & cloud creative studio', () =
     const imgRes = await boot.app.request(Endpoints.studioImage, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ prompt: 'مدينة مستقبلية فوق السحاب' }),
+      body: JSON.stringify({ prompt: 'بوستر سوني بلايستيشن 5 يد تحكم' }),
     });
     expect(imgRes.status).toBe(201);
     const imgBody = (await json(imgRes)) as import('@nova/shared').StudioImageResponse;
     expect(imgBody.provider).toBe('workers-ai-flux');
     expect(imgBody.attachment.url).toMatch(/^\/api\/uploads\/att_/);
     expect(imgBody.markdown).toContain(imgBody.attachment.url);
+    expect(imgBody.markdown).toContain('ملصق إعلاني وتصميم جرافيك');
 
     const dl = await boot.app.request(imgBody.attachment.url!);
     expect(dl.status).toBe(200);
     expect((await dl.arrayBuffer()).byteLength).toBe(600);
-
-    const vidRes = await boot.app.request(Endpoints.studioVideo, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ prompt: 'رحلة في الفضاء', locale: 'ar' }),
-    });
-    expect(vidRes.status).toBe(201);
-    const vidBody = (await json(vidRes)) as import('@nova/shared').StudioVideoResponse;
-    expect(vidBody.scenes).toHaveLength(4);
-    expect(vidBody.markdown).toContain('```nova-video');
   });
 });

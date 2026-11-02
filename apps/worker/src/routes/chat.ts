@@ -7,7 +7,7 @@ import { badRequest, describeError, HttpError } from '../lib/errors.js';
 import { sseResponse } from '../lib/sse.js';
 import { buildChatSystemPrompt } from '../agent/prompts.js';
 import { runAgent } from '../agent/loop.js';
-import { detectStudioIntent, generateCloudImage, generateCloudVideo } from './studio.js';
+import { detectStudioIntent, generateCloudImage } from './studio.js';
 import { performSafeGitHubSearch, performSafeJinaFetch, performSafeWebSearch } from '../agent/tools/web-search.js';
 import { classifySkillIntent } from '../agent/skills/router.js';
 
@@ -108,7 +108,7 @@ export function registerChatRoutes(app: Hono<AppEnv>) {
 
     // Enforce per-user daily quota (and 7-day lockout on exhaustion) before mutating DB or invoking AI.
     if (d.currentUser) {
-      const quotaCost = precomputedStudioIntent === 'video' ? 4 : precomputedStudioIntent === 'image' ? 2 : 1;
+      const quotaCost = precomputedStudioIntent === 'image' ? 2 : 1;
       await d.auth.consumeQuota(d.currentUser.id, quotaCost);
     }
 
@@ -182,9 +182,9 @@ export function registerChatRoutes(app: Hono<AppEnv>) {
       try {
         const studioIntent = detectStudioIntent(effectiveMessage, req.studioMode);
 
-        // Direct Cloud GPU Image / Video Studio Generation ($0 free)
-        if (studioIntent === 'image' || studioIntent === 'video') {
-          const studioModelId = studioIntent === 'image' ? 'nova-studio/cloud-image' : 'nova-studio/cloud-video';
+        // Direct Cloud GPU Image Studio Generation ($0 free)
+        if (studioIntent === 'image') {
+          const studioModelId = 'nova-studio/cloud-image';
           emit({
             type: 'ready',
             requestId: c.get('requestId'),
@@ -194,10 +194,7 @@ export function registerChatRoutes(app: Hono<AppEnv>) {
           });
           emit({ type: 'message.start', messageId: assistantMessageId, modelId: studioModelId, provider: 'workers-ai' });
 
-          const generated =
-            studioIntent === 'image'
-              ? await generateCloudImage(d, { prompt: effectiveMessage, conversationId, projectId, signal })
-              : await generateCloudVideo(d, { prompt: effectiveMessage, conversationId, projectId, signal });
+          const generated = await generateCloudImage(d, { prompt: effectiveMessage, conversationId, projectId, signal });
 
           emit({ type: 'text.delta', messageId: assistantMessageId, text: generated.markdown });
           await d.store.appendMessage({

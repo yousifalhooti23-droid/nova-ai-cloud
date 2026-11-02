@@ -4,7 +4,7 @@ import remarkGfm from 'remark-gfm';
 import DOMPurify from 'dompurify';
 import { Check, Copy } from 'lucide-react';
 import { highlight, normalizeLang } from './Highlight';
-import { AiVideoPlayer, GeneratedImageCard, isPreviewableWebsite, WebsitePreviewCard } from './StudioWidgets';
+import { GeneratedImageCard, isPreviewableWebsite, WebsitePreviewCard } from './StudioWidgets';
 import { MermaidDiagram } from './MermaidDiagram';
 import { cn } from '@/lib/cn';
 
@@ -33,7 +33,7 @@ interface Props {
  * Markdown renderer for assistant messages.
  * Code fences get a language chip + copy button (a hard requirement of the
  * product), complete HTML websites get an interactive Live Website Preview,
- * `nova-video` blocks render in the HD AI Video Player, and images render with zoom + download.
+ * and images render with zoom + download.
  */
 export const Markdown = memo(function Markdown({ content, copyLabel, copiedLabel, isStreaming, className }: Props) {
   return (
@@ -53,9 +53,6 @@ export const Markdown = memo(function Markdown({ content, copyLabel, copiedLabel
               );
             }
             const lang = match?.[1] ?? normalizeLang(codeClass?.replace('language-', '') ?? '');
-            if (lang === 'nova-video' && !isStreaming) {
-              return <AiVideoPlayer rawJson={raw} />;
-            }
             if (lang === 'mermaid' && !isStreaming) {
               return <MermaidDiagram code={raw} />;
             }
