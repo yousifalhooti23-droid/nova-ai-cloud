@@ -211,6 +211,8 @@ export interface ChatRequest {
   studioMode?: StudioMode;
   /** Force live web search grounding (from manual toggle or intent router). */
   webSearch?: boolean;
+  /** Active skills selected by the user in the UI. */
+  activeSkills?: string[];
 }
 
 export interface StudioImageRequest {

@@ -74,7 +74,8 @@ export class ModelRouter {
 
   providerInfos(): ProviderInfo[] {
     const cfg = this.config();
-    return this.adapters.map((a) => {
+    const sorted = [...this.adapters].sort((a, b) => this.priority(a.id, cfg) - this.priority(b.id, cfg));
+    return sorted.map((a) => {
       const s = a.status(cfg);
       return {
         id: a.id,
@@ -258,7 +259,9 @@ export class ModelRouter {
       ...handlers,
       onText: handlers.onText
         ? (chunk) => {
-            streamedAny = true;
+            if (chunk && chunk.trim().length > 0) {
+              streamedAny = true;
+            }
             handlers.onText!(chunk);
           }
         : undefined,

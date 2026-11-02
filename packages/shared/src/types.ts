@@ -224,7 +224,10 @@ export type ToolName =
   | 'write_memory'
   | 'web_search'
   | 'web_fetch'
-  | 'github_search';
+  | 'github_search'
+  | 'github_repo_inspect'
+  | 'youtube_summarize'
+  | 'math_calculate';
 
 export type ToolRisk = 'read-only' | 'proposal' | 'needs-approval' | 'destructive';
 

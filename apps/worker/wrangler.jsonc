@@ -45,7 +45,7 @@
     "NOVA_OWNER_EMAIL": "yousifalhooti23@gmail.com",
     "NOVA_OWNER_NAME": "Yousif",
     "NOVA_USER_QUOTA_LIMIT": "20",
-    "NOVA_MODEL_CHAT": "workers-ai:llama-3.3-70b-instruct-fp8-fast",
-    "NOVA_VERSION": "0.4.9"
+    "NOVA_PROVIDER_PRIORITY": "openrouter,gemini,groq,workers-ai,custom",
+    "NOVA_VERSION": "0.5.0"
   }
 }

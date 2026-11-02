@@ -6,3 +6,4 @@ export * from './sse.js';
 export * from './lang.js';
 export * from './validation.js';
 export * from './catalog/index.js';
+export * from './skills.js';

@@ -15,7 +15,7 @@ import type {
   ConversationPatchRequest, FileChange, FileResponse, FileWriteRequest, HealthResponse,
   LocalProviderKeysResponse, LocalProviderKeyUpdateRequest,
   MemoryCreateRequest, MemoryEntry, MemoryResponse, ModelClass, ModelsRefreshResponse,
-  ModelsResponse, Project, ProjectCreateRequest, ProviderId, SandboxExecRequest,
+  ModelsResponse, NovaSkill, Project, ProjectCreateRequest, ProviderId, SandboxExecRequest,
   SandboxExecResponse, SandboxStatusResponse, SearchRequest, SearchResponse,
   SettingsResponse, SettingsUpdateRequest, Task, TaskCreateRequest, UsageResponse,
 } from '@nova/shared';
@@ -425,6 +425,11 @@ export const api = {
       'POST',
       body,
     ),
+
+  /* ---- skills & mcp hub ---- */
+  listSkills: () => json<{ skills: NovaSkill[] }>('/api/skills', 'GET'),
+  importGitHubSkill: (url: string) => json<{ ok: boolean; skill: NovaSkill; message: string }>('/api/skills/import-github', 'POST', { url }),
+  toggleSkill: (skillId: string, enabled: boolean) => json<{ ok: boolean; skillId: string; enabled: boolean }>('/api/skills/toggle', 'POST', { skillId, enabled }),
 };
 
 /** Narrow an unknown error into something the UI can render. */

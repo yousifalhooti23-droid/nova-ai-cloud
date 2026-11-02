@@ -150,6 +150,23 @@ export function loadConfig(env: RawEnv): NovaConfig {
     },
   };
 
+  // Automatically elevate configured, active-key providers (OpenRouter, Gemini, Groq)
+  // to the front of the priority list right from loadConfig.
+  const activeKeys: ProviderId[] = [];
+  for (const p of ['openrouter', 'gemini', 'groq'] as ProviderId[]) {
+    if (providers[p]?.enabled && providers[p]?.apiKey) {
+      activeKeys.push(p);
+    }
+  }
+  if (providers.custom?.enabled && providers.custom?.baseUrl) {
+    activeKeys.push('custom');
+  }
+
+  const effectivePriority: ProviderId[] = [
+    ...activeKeys,
+    ...providerPriority.filter((p) => !activeKeys.includes(p)),
+  ];
+
   const sandboxKindRaw = (read(env, 'NOVA_SANDBOX') ?? 'disabled').toLowerCase();
   const sandboxKind = sandboxKindRaw === 'worker' || sandboxKindRaw === 'worker-isolate'
     ? 'worker-isolate'
@@ -159,8 +176,8 @@ export function loadConfig(env: RawEnv): NovaConfig {
 
   return {
     runtime,
-    version: read(env, 'NOVA_VERSION') ?? '0.1.0',
-    providerPriority,
+    version: read(env, 'NOVA_VERSION') ?? '0.5.0',
+    providerPriority: effectivePriority,
     providers,
     classOverrides: {
       chat: read(env, 'NOVA_MODEL_CHAT'),

@@ -15,6 +15,7 @@ import { registerModelRoutes } from './routes/models.js';
 import { registerProjectRoutes } from './routes/projects.js';
 import { registerSandboxRoutes } from './routes/sandbox.js';
 import { registerStudioRoutes } from './routes/studio.js';
+import { registerSkillsRoutes } from './routes/skills.js';
 import { ScopedStore } from './storage/scoped-store.js';
 
 const PUBLIC_AUTH_PATHS = new Set([
@@ -235,6 +236,7 @@ export function createApp(deps: AppDeps) {
   registerAgentRoutes(app);
   registerSandboxRoutes(app);
   registerStudioRoutes(app);
+  registerSkillsRoutes(app);
   registerMiscRoutes(app);
 
   return app;

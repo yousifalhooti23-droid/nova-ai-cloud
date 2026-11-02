@@ -5,10 +5,15 @@ import { memoryTools } from './memory.js';
 import { planningTools } from './planning.js';
 import { terminalTools } from './terminal.js';
 import { webTools } from './web-search.js';
+import { githubRepoInspectTool } from './github-tools.js';
+import { youtubeSummarizeTool } from './youtube-tools.js';
+import { mathCalculateTool } from './math-tools.js';
 import type { Tool } from './types.js';
 
+export const HUB_TOOLS: Tool[] = [githubRepoInspectTool, youtubeSummarizeTool, mathCalculateTool];
+
 /** Every tool the agent may call, in one registry. */
-export const TOOLS: Tool[] = [...planningTools, ...fileTools, ...terminalTools, ...gitTools, ...memoryTools, ...webTools];
+export const TOOLS: Tool[] = [...planningTools, ...fileTools, ...terminalTools, ...gitTools, ...memoryTools, ...webTools, ...HUB_TOOLS];
 
 export const TOOL_MAP = new Map<string, Tool>(TOOLS.map((t) => [t.descriptor.name, t]));
 
@@ -25,3 +30,6 @@ export function descriptor(name: string): ToolDescriptor | undefined {
 export * from './types.js';
 export { applyChange } from './files.js';
 export { performSafeWebSearch, performSafeGitHubSearch, performSafeWebFetch } from './web-search.js';
+export { inspectGitHubRepo, githubRepoInspectTool } from './github-tools.js';
+export { youtubeSummarizeTool } from './youtube-tools.js';
+export { evaluateSafeMath, mathCalculateTool } from './math-tools.js';

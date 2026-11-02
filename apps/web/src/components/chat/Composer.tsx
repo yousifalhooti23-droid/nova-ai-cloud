@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Film, Globe, Image as ImageIcon, MessageSquare, Paperclip, Send, Square, X } from 'lucide-react';
+import { Film, Globe, Image as ImageIcon, MessageSquare, Paperclip, Puzzle, Send, Square, X } from 'lucide-react';
 import { useI18n } from '@/i18n';
 import { cn } from '@/lib/cn';
 import { estimateTokens, type ModelClass, type StudioMode } from '@nova/shared';
@@ -9,6 +9,7 @@ import { useAppStore } from '@/store/app';
 import { useChatStore } from '@/store/chat';
 import { ModelPicker } from './ModelPicker';
 import { IconButton, Spinner } from '@/components/ui';
+import { SkillsModal } from '../skills/SkillsModal';
 
 const MAX_UPLOAD = 25 * 1024 * 1024;
 
@@ -25,8 +26,15 @@ export function Composer({ projectId, onNeedProject }: { projectId?: string | nu
 
   const [value, setValue] = useState('');
   const [dragging, setDragging] = useState(false);
+  const [skillsOpen, setSkillsOpen] = useState(false);
   const taRef = useRef<HTMLTextAreaElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+
+  const toggleSkill = (id: string) => {
+    const current = composer.activeSkills ?? [];
+    const next = current.includes(id) ? current.filter((x) => x !== id) : [...current, id];
+    setComposer({ activeSkills: next });
+  };
 
   // Auto-grow up to ~9 lines, then scroll inside.
   useEffect(() => {
@@ -116,6 +124,27 @@ export function Composer({ projectId, onNeedProject }: { projectId?: string | nu
             );
           })}
 
+          {/* Universal Skills & Plugins Hub */}
+          <button
+            type="button"
+            onClick={() => setSkillsOpen(true)}
+            title={locale === 'ar' ? 'متجر المهارات والإضافات الذكية: مستكشف GitHub، كانفاس الكود، مخططات المعمارية واستيراد أي مهارة' : 'Skills & MCP Hub: GitHub Explorer, Canvas, Architecture Diagrams, and GitHub skill importer'}
+            className={cn(
+              'ms-auto inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] sm:text-[11.5px] transition-all whitespace-nowrap',
+              composer.activeSkills?.length
+                ? 'border-accent/80 bg-accent/20 font-semibold text-accent shadow-[0_0_12px_rgba(56,189,248,0.25)]'
+                : 'border-line bg-panel text-muted hover:border-line-strong hover:text-text',
+            )}
+          >
+            <Puzzle size={12} className={cn(Boolean(composer.activeSkills?.length) && 'text-accent')} />
+            <span>{locale === 'ar' ? 'المهارات والإضافات' : 'Skills & MCP'}</span>
+            {composer.activeSkills?.length ? (
+              <span className="rounded-full bg-accent px-1.5 py-0.2 text-[9.5px] font-bold text-black">
+                {composer.activeSkills.length}
+              </span>
+            ) : null}
+          </button>
+
           {/* Manual Web Search Toggle */}
           <button
             type="button"
@@ -125,7 +154,7 @@ export function Composer({ projectId, onNeedProject }: { projectId?: string | nu
             }}
             title={locale === 'ar' ? 'تفعيل البحث الحي في الويب للوصول لأحدث معلومات وتحديثات اللحظة الحالية' : 'Toggle live web search grounding for real-time information'}
             className={cn(
-              'ms-auto inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] sm:text-[11.5px] transition-all whitespace-nowrap',
+              'inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] sm:text-[11.5px] transition-all whitespace-nowrap',
               composer.webSearch
                 ? 'border-sky-500/80 bg-sky-500/20 font-semibold text-sky-300 shadow-[0_0_12px_rgba(14,165,233,0.3)]'
                 : 'border-line bg-panel text-muted hover:border-line-strong hover:text-text',
@@ -283,6 +312,13 @@ export function Composer({ projectId, onNeedProject }: { projectId?: string | nu
           {!projectId ? ` · ${t('chat.noProject')}` : ''}
         </p>
       </div>
+
+      <SkillsModal
+        open={skillsOpen}
+        onClose={() => setSkillsOpen(false)}
+        activeSkillIds={composer.activeSkills ?? []}
+        onToggleActiveSkill={toggleSkill}
+      />
     </div>
   );
 }

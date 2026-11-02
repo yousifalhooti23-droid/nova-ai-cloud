@@ -5,6 +5,7 @@ import DOMPurify from 'dompurify';
 import { Check, Copy } from 'lucide-react';
 import { highlight, normalizeLang } from './Highlight';
 import { AiVideoPlayer, GeneratedImageCard, isPreviewableWebsite, WebsitePreviewCard } from './StudioWidgets';
+import { MermaidDiagram } from './MermaidDiagram';
 import { cn } from '@/lib/cn';
 
 /**
@@ -54,6 +55,9 @@ export const Markdown = memo(function Markdown({ content, copyLabel, copiedLabel
             const lang = match?.[1] ?? normalizeLang(codeClass?.replace('language-', '') ?? '');
             if (lang === 'nova-video' && !isStreaming) {
               return <AiVideoPlayer rawJson={raw} />;
+            }
+            if (lang === 'mermaid' && !isStreaming) {
+              return <MermaidDiagram code={raw} />;
             }
             if (!isStreaming && isPreviewableWebsite(lang, raw)) {
               return (

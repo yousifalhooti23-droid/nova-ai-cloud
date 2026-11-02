@@ -9,6 +9,7 @@ import { buildChatSystemPrompt } from '../agent/prompts.js';
 import { runAgent } from '../agent/loop.js';
 import { detectStudioIntent, generateCloudImage, generateCloudVideo } from './studio.js';
 import { performSafeGitHubSearch, performSafeJinaFetch, performSafeWebSearch } from '../agent/tools/web-search.js';
+import { classifySkillIntent } from '../agent/skills/router.js';
 
 /** Read-only tool set for project-aware chat (no mutations, ever). */
 const CHAT_TOOLS = [
@@ -253,9 +254,19 @@ ${formattedSources}
           }
         }
 
+        let customSkills: any[] = [];
+        try {
+          const stored = await d.store.getSettings();
+          if (Array.isArray(stored.customSkills)) customSkills = stored.customSkills;
+        } catch {
+          /* ignore */
+        }
+        const skillRouting = classifySkillIntent(effectiveMessage, req.activeSkills, customSkills);
+
         const system = [
           buildChatSystemPrompt({ memory: [...memory, ...globalMemory], project, studioMode: studioIntent ?? req.studioMode ?? null }),
           req.systemPrompt?.trim() ? req.systemPrompt.trim() : '',
+          ...skillRouting.systemPromptAdditions,
         ]
           .filter(Boolean)
           .join('\n\n');
@@ -337,7 +348,43 @@ ${formattedSources}
           'chat',
         );
 
-        const finalContent = (result.text || text).trim();
+        let finalContent = (result.text || text).trim();
+        let finalModel = result.model;
+        let finalProvider = result.provider;
+
+        if (!finalContent) {
+          d.log.warn('primary model returned empty output, attempting fallback completion');
+          try {
+            const fallbackResolution = await d.router.resolve({
+              modelClass: studioIntent === 'website' ? 'coding' : (req.modelClass ?? conversation!.modelClass ?? 'chat'),
+            });
+            if (fallbackResolution.model.id !== resolution.model.id) {
+              const fallbackResult = await d.router.complete(
+                {
+                  modelId: fallbackResolution.model.id,
+                  messages,
+                  stream: true,
+                  temperature: req.temperature,
+                  maxTokens: req.maxTokens ?? (studioIntent === 'website' ? 8192 : undefined),
+                  signal,
+                },
+                {
+                  onText: (chunk) => {
+                    text += chunk;
+                    emit({ type: 'text.delta', messageId: assistantMessageId, text: chunk });
+                  },
+                },
+                'chat',
+              );
+              finalContent = (fallbackResult.text || text).trim();
+              finalModel = fallbackResult.model;
+              finalProvider = fallbackResult.provider;
+            }
+          } catch {
+            /* ignore fallback error */
+          }
+        }
+
         if (!finalContent) {
           throw new HttpError(502, 'تعذّر إكمال الرد من النموذج (تم إرجاع رد فارغ). يرجى المحاولة وسيقوم النظام باختيار نموذج بديل تلقائياً.', 'empty_response');
         }
@@ -348,8 +395,8 @@ ${formattedSources}
           role: 'assistant',
           content: finalContent,
           status: 'complete',
-          modelId: result.model.id,
-          providerId: result.provider,
+          modelId: finalModel.id,
+          providerId: finalProvider,
           tokensIn: result.tokensIn,
           tokensOut: result.tokensOut,
         });

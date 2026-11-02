@@ -26,6 +26,7 @@ export interface ComposerState {
   modelClass: ModelClass;
   studioMode: StudioMode;
   webSearch: boolean;
+  activeSkills: string[];
   temperature: number;
   systemPrompt: string;
   attachments: UploadResult[];
@@ -82,7 +83,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   loadingList: false,
   loadingMessages: false,
   streaming: emptyStreaming,
-  composer: { modelId: null, modelClass: 'chat', studioMode: 'chat', webSearch: false, temperature: 0.7, systemPrompt: '', attachments: [], uploading: false },
+  composer: { modelId: null, modelClass: 'chat', studioMode: 'chat', webSearch: false, activeSkills: [], temperature: 0.7, systemPrompt: '', attachments: [], uploading: false },
   lastError: null,
 
   async loadConversations(projectId) {
@@ -278,6 +279,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       modelClass: composer.modelClass,
       studioMode: activeStudioMode !== 'chat' ? activeStudioMode : undefined,
       webSearch: composer.webSearch || undefined,
+      activeSkills: composer.activeSkills?.length ? composer.activeSkills : undefined,
       temperature: composer.temperature,
       systemPrompt: composer.systemPrompt || undefined,
       attachments: composer.attachments.map((a) => ({ id: a.id, name: a.name, mime: a.mime, size: a.size, url: a.url })),

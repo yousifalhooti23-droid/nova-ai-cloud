@@ -91,7 +91,7 @@ function resetStores() {
   useChatStore.setState({
     conversations: [], activeId: null, messages: {}, loadingList: false, loadingMessages: false,
     streaming: { ...emptyStreaming },
-    composer: { modelId: null, modelClass: 'chat', studioMode: 'chat', webSearch: false, temperature: 0.7, systemPrompt: '', attachments: [], uploading: false },
+    composer: { modelId: null, modelClass: 'chat', studioMode: 'chat', webSearch: false, activeSkills: [], temperature: 0.7, systemPrompt: '', attachments: [], uploading: false },
     lastError: null,
   });
   useCodeStore.setState({

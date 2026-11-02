@@ -70,12 +70,14 @@ export interface AppSettings {
   locale: 'ar' | 'en';
   defaults: Record<ModelClass, string | null>;
   agent: { maxSteps: number; autoApply: boolean; allowTerminal: boolean };
+  customSkills?: import('@nova/shared').NovaSkill[];
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
   locale: 'ar',
   defaults: { chat: null, reasoning: null, coding: null, 'long-context': null },
   agent: { maxSteps: 12, autoApply: false, allowTerminal: false },
+  customSkills: [],
 };
 
 export interface ProjectStats {
