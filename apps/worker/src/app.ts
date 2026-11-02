@@ -170,7 +170,7 @@ export function createApp(deps: AppDeps) {
           currentUser: authHit.user,
           currentTokenHash: authHit.tokenHash,
         });
-      } else if (deps.cfg.userAuthEnabled && !PUBLIC_AUTH_PATHS.has(c.req.path)) {
+      } else if (deps.cfg.userAuthEnabled && !PUBLIC_AUTH_PATHS.has(c.req.path) && !c.req.path.startsWith('/api/admin/studio/')) {
         return c.json(
           {
             error: 'يرجى تسجيل الدخول للوصول إلى حسابك الخاص.',
