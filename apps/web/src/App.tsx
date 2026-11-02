@@ -54,6 +54,11 @@ function Shell() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const mod = e.metaKey || e.ctrlKey;
+      if (e.key === 'F5' || (mod && (e.key === 'r' || e.key === 'R'))) {
+        e.preventDefault();
+        window.location.reload();
+        return;
+      }
       if (!mod) return;
       if (e.key === 'b' || e.key === 'B') {
         e.preventDefault();

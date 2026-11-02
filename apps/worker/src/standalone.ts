@@ -244,10 +244,10 @@ function assetResponse(body: string, mime: string, method: string): Response {
     headers: {
       'content-type': mime,
       'content-length': String(buf.byteLength),
-      // hashed assets are immutable; index.html must never be served stale
-      'cache-control': mime.startsWith('text/html')
-        ? 'no-store, no-cache, must-revalidate, max-age=0'
-        : 'public, max-age=31536000, immutable',
+      // Always serve fresh assets in desktop mode — zero caching bugs
+      'cache-control': 'no-store, no-cache, must-revalidate, max-age=0',
+      'pragma': 'no-cache',
+      'expires': '0',
     },
   });
 }
