@@ -8,6 +8,7 @@
   --color-bg: var(--color-bg);
   --color-surface: var(--color-surface);
   --color-panel: var(--color-panel);
+  --color-card: var(--color-card);
   --color-elevated: var(--color-elevated);
   --color-line: var(--color-line);
   --color-line-strong: var(--color-line-strong);
@@ -39,6 +40,7 @@
   --color-bg: #F7F9FD;
   --color-surface: #FFFFFF;
   --color-panel: #FFFFFF;
+  --color-card: #FFFFFF;
   --color-elevated: #F0F4FA;
   --color-line: #E5EAF3;
   --color-line-strong: #D5DEEC;
@@ -53,41 +55,44 @@
   --color-warning: #F59E0B;
   --color-danger: #EF4444;
 
-  /* Always Deep Navy Sidebar */
+  /* Consistent Deep Navy Sidebar */
   --sidebar-bg: #071A3D;
   --sidebar-surface: #0B1F46;
   --sidebar-hover: #102652;
   --sidebar-active: #1769FF;
   --sidebar-line: #142852;
-  --sidebar-text: #F0F4FC;
+  --sidebar-text: #F5F7FF;
   --sidebar-muted: #95A6C4;
   --sidebar-dim: #6B7E9F;
 }
 
 html.dark {
-  /* NOVA Dark Palette (Deep Cosmic Navy) */
-  --color-bg: #071021;
-  --color-surface: #0B172E;
-  --color-panel: #0E1D3A;
-  --color-elevated: #13264A;
-  --color-line: #1B315A;
-  --color-line-strong: #274378;
-  --color-text: #F0F4FC;
-  --color-muted: #9BB0D3;
-  --color-dim: #6B80A5;
-  --color-accent: #2977FF;
-  --color-accent-hover: #488BFF;
+  /* NOVA Dark Palette (Official Deep Navy Tokens) */
+  --color-bg: #071225;
+  --color-surface: #0B1931;
+  --color-panel: #0B1931;
+  --color-card: #0D1C36;
+  --color-elevated: #102242;
+  --color-line: #1C3459;
+  --color-line-strong: #27477D;
+  --color-text: #F5F7FF;
+  --color-muted: #A7B6D0;
+  --color-dim: #7B8FA8;
+  --color-accent: #1769FF;
+  --color-accent-hover: #397BFF;
   --color-accent-soft: #0E244E;
   --color-info: #38BDF8;
   --color-success: #34D399;
   --color-warning: #FBBF24;
   --color-danger: #F87171;
 
-  --sidebar-bg: #040B18;
-  --sidebar-surface: #07142A;
-  --sidebar-hover: #0E2244;
-  --sidebar-line: #132950;
-  --sidebar-text: #F0F4FC;
+  /* Sidebar stays #071A3D in both themes */
+  --sidebar-bg: #071A3D;
+  --sidebar-surface: #0B1F46;
+  --sidebar-hover: #102652;
+  --sidebar-active: #1769FF;
+  --sidebar-line: #142852;
+  --sidebar-text: #F5F7FF;
   --sidebar-muted: #95A6C4;
   --sidebar-dim: #6B7E9F;
 }
@@ -319,22 +324,40 @@ textarea.input {
   box-shadow: 0 2px 10px rgba(7, 26, 61, 0.03);
   transition: all 0.18s ease;
 }
+html.dark .nova-card {
+  background: var(--color-card);
+  border-color: var(--color-line);
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.25);
+}
 .nova-card:hover {
-  border-color: color-mix(in oklab, var(--color-accent) 38%, var(--color-line));
-  box-shadow: 0 6px 20px rgba(23, 105, 255, 0.07);
+  border-color: color-mix(in oklab, var(--color-accent) 45%, var(--color-line));
+  box-shadow: 0 6px 20px rgba(23, 105, 255, 0.08);
   transform: translateY(-1.5px);
+}
+html.dark .nova-card:hover {
+  border-color: var(--color-accent);
+  box-shadow: 0 6px 22px rgba(23, 105, 255, 0.18);
 }
 
 .nova-composer-card {
   background: var(--color-surface);
   border: 1px solid var(--color-line);
-  border-radius: 20px;
+  border-radius: 24px;
   box-shadow: 0 4px 24px rgba(7, 26, 61, 0.05), 0 1px 3px rgba(7, 26, 61, 0.02);
-  transition: all 0.18s ease;
+  transition: all 0.2s ease;
+}
+html.dark .nova-composer-card {
+  background: var(--color-card);
+  border-color: var(--color-line);
+  box-shadow: 0 4px 28px rgba(0, 0, 0, 0.35);
 }
 .nova-composer-card:focus-within {
-  border-color: color-mix(in oklab, var(--color-accent) 60%, var(--color-line));
-  box-shadow: 0 8px 30px rgba(23, 105, 255, 0.12), 0 0 0 3px rgba(23, 105, 255, 0.06);
+  border-color: color-mix(in oklab, var(--color-accent) 65%, var(--color-line));
+  box-shadow: 0 8px 32px rgba(23, 105, 255, 0.12), 0 0 0 3px rgba(23, 105, 255, 0.08);
+}
+html.dark .nova-composer-card:focus-within {
+  border-color: var(--color-accent);
+  box-shadow: 0 8px 36px rgba(23, 105, 255, 0.22), 0 0 0 3px rgba(23, 105, 255, 0.15);
 }
 
 .scroll-thin {
@@ -427,8 +450,11 @@ textarea.input {
   background: var(--color-elevated);
   border: 1px solid var(--color-line);
   border-radius: 5px;
-  padding: 0.12em 0.38em;
-  color: #f0b8a4;
+  padding: 0.14em 0.42em;
+  color: #C2410C;
+}
+html.dark .markdown code:not(pre code) {
+  color: #FDBA74;
 }
 .markdown table {
   border-collapse: collapse;

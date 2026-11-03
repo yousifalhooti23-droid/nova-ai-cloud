@@ -3,7 +3,7 @@ import { cn } from '@/lib/cn';
 
 export interface NovaLogoProps extends HTMLAttributes<HTMLDivElement> {
   size?: 'sm' | 'md' | 'lg' | 'xl';
-  variant?: 'full' | 'icon';
+  variant?: 'full' | 'icon' | 'hero';
   theme?: 'dark' | 'light' | 'auto';
   className?: string;
 }
@@ -40,10 +40,29 @@ export function NovaLogo({
         alt="NOVA AI Cloud"
         className={cn(
           'object-contain transition-transform duration-200',
-          variant === 'icon' ? iconSizes[size] : fullSizes[size],
+          variant === 'icon'
+            ? iconSizes[size]
+            : variant === 'hero'
+              ? 'h-12 sm:h-14 w-auto'
+              : fullSizes[size],
         )}
         draggable={false}
       />
+
+      {variant === 'hero' && (
+        <span
+          className={cn(
+            'font-black tracking-tight text-[28px] sm:text-[34px] leading-none',
+            theme === 'dark'
+              ? 'text-[#F5F7FF]'
+              : theme === 'light'
+                ? 'text-[#071A3D]'
+                : 'text-[#101C36] dark:text-[#F5F7FF]',
+          )}
+        >
+          Nova
+        </span>
+      )}
 
       {variant === 'full' && (
         <div className="flex flex-col text-start leading-none">

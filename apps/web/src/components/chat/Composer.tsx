@@ -216,7 +216,7 @@ export function Composer({ projectId, onNeedProject }: { projectId?: string | nu
             if (e.dataTransfer?.files?.length) void onFiles(e.dataTransfer.files);
           }}
           className={cn(
-            'nova-composer-card border transition-all p-1.5 sm:p-2.5',
+            'nova-composer-card border transition-all p-3 sm:p-3.5',
             dragging
               ? 'border-accent bg-accent/5'
               : streaming
@@ -226,7 +226,7 @@ export function Composer({ projectId, onNeedProject }: { projectId?: string | nu
         >
           <textarea
             ref={taRef}
-            rows={1}
+            rows={2}
             value={value}
             disabled={streaming}
             onChange={(e) => setValue(e.target.value)}
@@ -244,11 +244,11 @@ export function Composer({ projectId, onNeedProject }: { projectId?: string | nu
               }
             }}
             placeholder={dragging ? t('studio.dropHint') : placeholder}
-            className="max-h-[220px] w-full resize-none bg-transparent px-3 pt-2 text-[14.5px] leading-relaxed text-text outline-none placeholder:text-dim disabled:opacity-60"
+            className="min-h-[48px] max-h-[220px] w-full resize-none bg-transparent px-2.5 pt-1 text-[15px] leading-relaxed text-text outline-none placeholder:text-muted/70 disabled:opacity-60"
           />
 
-          <div className="flex items-center justify-between gap-1.5 px-1 pt-1.5 sm:gap-2">
-            <div className="flex items-center gap-1 sm:gap-1.5 flex-wrap">
+          <div className="flex items-center justify-between gap-2 px-1 pt-2 sm:gap-3">
+            <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
               <input
                 ref={fileRef}
                 type="file"
@@ -259,7 +259,7 @@ export function Composer({ projectId, onNeedProject }: { projectId?: string | nu
               />
               <IconButton
                 label={t('chat.attach')}
-                className="shrink-0 text-muted hover:text-text hover:bg-elevated rounded-xl"
+                className="shrink-0 text-muted hover:text-text hover:bg-elevated rounded-xl h-8 w-8"
                 onClick={() => (projectId ? fileRef.current?.click() : (onNeedProject?.(), fileRef.current?.click()))}
                 disabled={composer.uploading}
               >
@@ -271,9 +271,9 @@ export function Composer({ projectId, onNeedProject }: { projectId?: string | nu
                 type="button"
                 onClick={() => setSkillsOpen(true)}
                 title={locale === 'ar' ? 'متجر الأدوات والمهارات الذكية' : 'AI Tools & Skills'}
-                className="inline-flex items-center gap-1.5 rounded-full border border-line bg-elevated/70 px-2.5 py-1 text-[11px] font-medium text-muted hover:text-text hover:border-line-strong transition-colors"
+                className="inline-flex items-center gap-1.5 rounded-full border border-line bg-elevated/80 px-3 py-1 text-[12px] font-medium text-muted hover:text-text hover:border-line-strong hover:bg-elevated transition-colors"
               >
-                <Puzzle size={12} className="text-accent" />
+                <Puzzle size={13} className="text-accent" />
                 <span>{locale === 'ar' ? 'الأدوات' : 'Tools'}</span>
               </button>
 
@@ -285,13 +285,13 @@ export function Composer({ projectId, onNeedProject }: { projectId?: string | nu
                   taRef.current?.focus();
                 }}
                 className={cn(
-                  'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium transition-all',
+                  'inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[12px] font-medium transition-all',
                   composer.webSearch
-                    ? 'border-sky-500/80 bg-sky-500/15 text-sky-600 dark:text-sky-300 font-semibold shadow-sm'
-                    : 'border-line bg-elevated/70 text-muted hover:text-text hover:border-line-strong',
+                    ? 'border-sky-500/80 bg-sky-500/15 text-sky-600 dark:text-sky-300 font-semibold shadow-xs'
+                    : 'border-line bg-elevated/80 text-muted hover:text-text hover:border-line-strong hover:bg-elevated',
                 )}
               >
-                <Globe size={12} className={cn(composer.webSearch ? 'text-sky-500' : 'text-muted')} />
+                <Globe size={13} className={cn(composer.webSearch ? 'text-sky-500' : 'text-muted')} />
                 <span>{locale === 'ar' ? 'بحث الويب' : 'Web Search'}</span>
                 {composer.webSearch ? <span className="h-1.5 w-1.5 rounded-full bg-sky-500 animate-pulse" /> : null}
               </button>
@@ -305,10 +305,10 @@ export function Composer({ projectId, onNeedProject }: { projectId?: string | nu
                 <button
                   type="button"
                   onClick={stop}
-                  className="flex h-9 w-9 items-center justify-center rounded-full border border-danger/40 bg-danger/10 text-danger transition-colors hover:bg-danger/20"
+                  className="flex h-10 w-10 items-center justify-center rounded-full border border-danger/40 bg-danger/10 text-danger transition-colors hover:bg-danger/20"
                   title={t('chat.stop')}
                 >
-                  <Square size={13} />
+                  <Square size={14} />
                 </button>
               ) : (
                 <button
@@ -319,15 +319,15 @@ export function Composer({ projectId, onNeedProject }: { projectId?: string | nu
                   onClick={submit}
                   disabled={!canSend}
                   className={cn(
-                    'flex h-9 w-9 items-center justify-center rounded-full transition-all duration-150',
+                    'flex h-10 w-10 items-center justify-center rounded-full transition-all duration-200 shadow-md',
                     canSend
-                      ? 'bg-[#1769FF] text-white shadow-[0_2px_10px_rgba(23,105,255,0.4)] hover:bg-[#1255D4] hover:scale-105 active:scale-95'
+                      ? 'bg-[#1769FF] text-white shadow-[0_4px_16px_rgba(23,105,255,0.4)] hover:bg-[#1255D4] hover:shadow-[0_6px_20px_rgba(23,105,255,0.5)] active:scale-95'
                       : 'bg-elevated border border-line text-dim cursor-not-allowed opacity-50',
                   )}
                   title="Enter"
                   aria-label={t('chat.send')}
                 >
-                  <Send size={14} className="rtl:rotate-180" />
+                  <Send size={15} className="rtl:rotate-180" />
                 </button>
               )}
             </div>

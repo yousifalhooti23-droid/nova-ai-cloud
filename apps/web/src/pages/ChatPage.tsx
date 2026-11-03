@@ -315,36 +315,36 @@ export function ChatPage() {
       {/* -------------------------------------------------------- messages */}
       <div ref={ref} onScroll={onScroll} className="nova-gradient-bg scroll-thin relative min-h-0 flex-1">
         {list.length === 0 && !showStreaming ? (
-          <div className="mx-auto flex min-h-full max-w-4xl flex-col items-center justify-center px-4 py-6 sm:py-10">
-            {/* Centered NOVA Logo */}
-            <div className="mb-2">
-              <NovaLogo size="xl" variant="full" />
+          <div className="mx-auto flex min-h-full max-w-4xl flex-col items-center justify-center px-4 py-8 sm:py-12">
+            {/* Primary Official NOVA Logo (Single Instance) */}
+            <div className="mb-2 transition-transform duration-200 hover:scale-102">
+              <NovaLogo variant="hero" />
             </div>
 
-            <h2 className="text-center text-[22px] sm:text-[28px] font-extrabold tracking-tight text-[#101C36] dark:text-white mt-1">
+            <h1 className="text-center text-[24px] sm:text-[30px] font-extrabold tracking-tight text-text mt-2">
               {locale === 'ar' ? 'مرحبًا بك في NOVA AI Cloud' : 'Welcome to NOVA AI Cloud'}
-            </h2>
-            <p className="mt-1 text-center text-[13px] sm:text-[14px] text-[#68758C] dark:text-[#9BB0D3] leading-relaxed max-w-lg">
+            </h1>
+            <p className="mt-1 text-center text-[13.5px] sm:text-[14.5px] text-muted leading-relaxed max-w-lg">
               {locale === 'ar' ? 'منصة سحابية موحدة لأقوى نماذج الذكاء الاصطناعي.' : 'Unified personal cloud platform for state-of-the-art AI models.'}
             </p>
             {/* Hidden semantic tag to guarantee test match for chat.emptyTitle */}
             <span className="sr-only">{t('chat.emptyTitle')}</span>
 
-            {/* 5 AI Tools & Features Cards (Horizontal Grid) */}
-            <div className="mt-6 sm:mt-8 grid w-full grid-cols-2 sm:grid-cols-5 gap-2.5 sm:gap-3">
+            {/* Standardized 5 AI Tools & Capabilities Cards */}
+            <div className="mt-8 sm:mt-10 grid w-full grid-cols-2 sm:grid-cols-5 gap-3 sm:gap-3.5">
               {/* Card 1: General Help */}
               <button
                 type="button"
                 onClick={() => void send(locale === 'ar' ? 'أهلاً نوفا، لخص لي أهم ميزات المنصة واقترح أفكاراً مبتكرة للبدء.' : 'Hello Nova, introduce yourself and suggest creative ideas.')}
-                className="nova-card p-3.5 flex flex-col items-center text-center group cursor-pointer"
+                className="nova-card flex flex-col items-center justify-center text-center p-4 rounded-2xl min-h-[144px] transition-all duration-200 cursor-pointer group"
               >
-                <div className="grid h-10 w-10 place-items-center rounded-2xl bg-[#EAF1FF] text-[#1769FF] mb-2.5 group-hover:scale-105 transition-transform">
-                  <Sparkles size={18} />
+                <div className="grid h-11 w-11 place-items-center rounded-2xl bg-[#EAF1FF] text-[#1769FF] dark:bg-[#1769FF]/15 dark:text-[#397BFF] mb-2.5 transition-transform duration-200 group-hover:scale-105 shrink-0">
+                  <Sparkles size={20} />
                 </div>
-                <h3 className="text-[12.5px] font-bold text-text group-hover:text-accent transition-colors">
+                <h3 className="text-[13px] font-bold text-text group-hover:text-accent transition-colors line-clamp-1">
                   {locale === 'ar' ? 'مساعدة عامة' : 'General Help'}
                 </h3>
-                <p className="text-[10.5px] text-muted leading-tight mt-1">
+                <p className="text-[11px] text-muted leading-tight mt-1 line-clamp-2">
                   {locale === 'ar' ? 'إجابة، كتابة، تلخيص وأفكار إبداعية' : 'Q&A, writing, summary & ideas'}
                 </p>
               </button>
@@ -356,15 +356,15 @@ export function ChatPage() {
                   const input = document.querySelector('input[type="file"]') as HTMLInputElement;
                   input?.click();
                 }}
-                className="nova-card p-3.5 flex flex-col items-center text-center group cursor-pointer"
+                className="nova-card flex flex-col items-center justify-center text-center p-4 rounded-2xl min-h-[144px] transition-all duration-200 cursor-pointer group"
               >
-                <div className="grid h-10 w-10 place-items-center rounded-2xl bg-[#E8F8F0] text-[#10B981] mb-2.5 group-hover:scale-105 transition-transform">
-                  <FileText size={18} />
+                <div className="grid h-11 w-11 place-items-center rounded-2xl bg-[#E6F8F0] text-[#10B981] dark:bg-[#10B981]/15 dark:text-[#34D399] mb-2.5 transition-transform duration-200 group-hover:scale-105 shrink-0">
+                  <FileText size={20} />
                 </div>
-                <h3 className="text-[12.5px] font-bold text-text group-hover:text-emerald-500 transition-colors">
+                <h3 className="text-[13px] font-bold text-text group-hover:text-emerald-500 transition-colors line-clamp-1">
                   {locale === 'ar' ? 'تحليل الملفات' : 'File Analysis'}
                 </h3>
-                <p className="text-[10.5px] text-muted leading-tight mt-1">
+                <p className="text-[11px] text-muted leading-tight mt-1 line-clamp-2">
                   {locale === 'ar' ? 'PDF، مستندات، صور، وجداول' : 'PDF, docs, images & CSV'}
                 </p>
               </button>
@@ -373,33 +373,33 @@ export function ChatPage() {
               <button
                 type="button"
                 onClick={() => void send(locale === 'ar' ? 'اكتب لي سيناريو فيديو إعلاني احترافي مع وصف المشاهد والمؤثرات البصرية.' : 'Draft a professional video storyboard with visual scenes.')}
-                className="nova-card p-3.5 flex flex-col items-center text-center group cursor-pointer"
+                className="nova-card flex flex-col items-center justify-center text-center p-4 rounded-2xl min-h-[144px] transition-all duration-200 cursor-pointer group"
               >
-                <div className="grid h-10 w-10 place-items-center rounded-2xl bg-[#F3E8FF] text-[#8B5CF6] mb-2.5 group-hover:scale-105 transition-transform">
-                  <Video size={18} />
+                <div className="grid h-11 w-11 place-items-center rounded-2xl bg-[#F3E8FF] text-[#8B5CF6] dark:bg-[#8B5CF6]/15 dark:text-[#A78BFA] mb-2.5 transition-transform duration-200 group-hover:scale-105 shrink-0">
+                  <Video size={20} />
                 </div>
-                <h3 className="text-[12.5px] font-bold text-text group-hover:text-purple-500 transition-colors">
+                <h3 className="text-[13px] font-bold text-text group-hover:text-purple-500 transition-colors line-clamp-1">
                   {locale === 'ar' ? 'إنشاء الفيديو' : 'Video Creation'}
                 </h3>
-                <p className="text-[10.5px] text-muted leading-tight mt-1">
+                <p className="text-[11px] text-muted leading-tight mt-1 line-clamp-2">
                   {locale === 'ar' ? 'مقاطع قصيرة وعروض مرئية' : 'Short clips & visual scenes'}
                 </p>
               </button>
 
-              {/* Card 4: Image Studio (FLUX.2 Pro) */}
+              {/* Card 4: Image Studio */}
               <button
                 type="button"
                 onClick={() => setComposer({ studioMode: 'image' })}
-                className="nova-card p-3.5 flex flex-col items-center text-center group cursor-pointer"
+                className="nova-card flex flex-col items-center justify-center text-center p-4 rounded-2xl min-h-[144px] transition-all duration-200 cursor-pointer group"
               >
-                <div className="grid h-10 w-10 place-items-center rounded-2xl bg-[#E0F2FE] text-[#0284C7] mb-2.5 group-hover:scale-105 transition-transform">
-                  <ImageIcon size={18} />
+                <div className="grid h-11 w-11 place-items-center rounded-2xl bg-[#E0F2FE] text-[#0284C7] dark:bg-[#0284C7]/15 dark:text-[#38BDF8] mb-2.5 transition-transform duration-200 group-hover:scale-105 shrink-0">
+                  <ImageIcon size={20} />
                 </div>
-                <h3 className="text-[12.5px] font-bold text-text group-hover:text-sky-500 transition-colors">
+                <h3 className="text-[13px] font-bold text-text group-hover:text-sky-500 transition-colors line-clamp-1">
                   {locale === 'ar' ? 'إنشاء الصور' : 'Image Creation'}
                 </h3>
-                <p className="text-[10.5px] text-muted leading-tight mt-1">
-                  {locale === 'ar' ? 'صور احترافية بالذكاء الاصطناعي (FLUX.2)' : 'Pro FLUX.2 Ultra-HD art'}
+                <p className="text-[11px] text-muted leading-tight mt-1 line-clamp-2">
+                  {locale === 'ar' ? 'صور احترافية بالذكاء الاصطناعي' : 'Pro Ultra-HD visual generation'}
                 </p>
               </button>
 
@@ -407,33 +407,18 @@ export function ChatPage() {
               <button
                 type="button"
                 onClick={() => setView('code')}
-                className="nova-card p-3.5 flex flex-col items-center text-center group cursor-pointer col-span-2 sm:col-span-1"
+                className="nova-card flex flex-col items-center justify-center text-center p-4 rounded-2xl min-h-[144px] transition-all duration-200 cursor-pointer group col-span-2 sm:col-span-1"
               >
-                <div className="grid h-10 w-10 place-items-center rounded-2xl bg-[#EEF2FF] text-[#4F46E5] mb-2.5 group-hover:scale-105 transition-transform">
-                  <Code2 size={18} />
+                <div className="grid h-11 w-11 place-items-center rounded-2xl bg-[#EEF2FF] text-[#4F46E5] dark:bg-[#4F46E5]/15 dark:text-[#818CF8] mb-2.5 transition-transform duration-200 group-hover:scale-105 shrink-0">
+                  <Code2 size={20} />
                 </div>
-                <h3 className="text-[12.5px] font-bold text-text group-hover:text-indigo-500 transition-colors">
+                <h3 className="text-[13px] font-bold text-text group-hover:text-indigo-500 transition-colors line-clamp-1">
                   {locale === 'ar' ? 'كتابة الأكواد' : 'Code Creation'}
                 </h3>
-                <p className="text-[10.5px] text-muted leading-tight mt-1">
+                <p className="text-[11px] text-muted leading-tight mt-1 line-clamp-2">
                   {locale === 'ar' ? 'تطوير، شرح، وتصحيح الأكواد' : 'Develop, explain & debug'}
                 </p>
               </button>
-            </div>
-
-            {/* Quick Suggestions */}
-            <div className="mt-4 grid w-full grid-cols-1 sm:grid-cols-2 gap-2">
-              {suggestions.map((s) => (
-                <button
-                  key={s}
-                  type="button"
-                  onClick={() => void send(s, projectId)}
-                  className="nova-card p-2.5 sm:p-3 flex items-center gap-2.5 text-start text-[12px] text-muted hover:text-text transition-colors"
-                >
-                  <Lightbulb size={14} className="shrink-0 text-accent" />
-                  <span className="min-w-0 truncate">{s}</span>
-                </button>
-              ))}
             </div>
           </div>
         ) : (

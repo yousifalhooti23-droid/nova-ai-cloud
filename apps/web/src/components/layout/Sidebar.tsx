@@ -355,14 +355,14 @@ function NavButton({
       aria-label={ariaLabel || label}
       className={cn(
         'group flex items-center gap-3 rounded-xl transition-all duration-150 text-start',
-        collapsed ? 'h-9 w-9 justify-center mx-auto p-0' : 'w-full px-3 py-2 text-[12.5px] font-medium',
+        collapsed ? 'h-10 w-10 justify-center mx-auto p-0' : 'w-full h-10 px-3 text-[13px] font-medium',
         active
           ? 'bg-[#1769FF] font-semibold text-white shadow-sm'
           : 'text-[#95A6C4] hover:bg-[#0B1F46] hover:text-white',
         className,
       )}
     >
-      <span className={cn('shrink-0 transition-transform duration-150', active ? 'text-white' : 'text-[#8297BA] group-hover:text-white')}>
+      <span className={cn('w-5 flex items-center justify-center shrink-0 transition-transform duration-150', active ? 'text-white' : 'text-[#8297BA] group-hover:text-white')}>
         {icon}
       </span>
       {!collapsed && (

@@ -159,7 +159,7 @@ export function CodePage() {
             >
               <Menu size={19} />
             </button>
-            <h1 className="truncate text-[13.5px] font-medium">{t('nav.code')}</h1>
+            <h1 className="truncate text-[13.5px] font-medium text-text">{t('nav.code')}</h1>
           </header>
         ) : null}
         <div className="flex flex-1 items-center justify-center overflow-y-auto p-6">

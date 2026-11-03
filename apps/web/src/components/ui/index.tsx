@@ -223,7 +223,7 @@ export function Modal({
       >
         <header className="flex items-start justify-between gap-4 border-b border-line px-4 py-3">
           <div className="min-w-0">
-            <h2 className="truncate text-[14px] font-semibold">{title}</h2>
+            <h2 className="truncate text-[14px] font-bold text-text">{title}</h2>
             {subtitle ? <p className="mt-0.5 text-[11.5px] text-dim">{subtitle}</p> : null}
           </div>
           <IconButton label="×" onClick={onClose}>
