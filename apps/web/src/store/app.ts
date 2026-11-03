@@ -36,7 +36,7 @@ function loadPrefs(): Prefs {
     editorFontSize: 13,
     editorWrap: false,
     diffMode: 'unified',
-    theme: 'dark',
+    theme: 'light',
     soundEffects: true,
   };
   try {

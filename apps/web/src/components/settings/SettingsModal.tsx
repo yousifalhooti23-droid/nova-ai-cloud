@@ -108,8 +108,13 @@ function GeneralTab() {
   const toggleTheme = (newTheme: 'dark' | 'light') => {
     patchPrefs({ theme: newTheme });
     if (typeof document !== 'undefined') {
-      document.documentElement.classList.toggle('light', newTheme === 'light');
-      document.documentElement.classList.toggle('dark', newTheme === 'dark');
+      if (newTheme === 'dark') {
+        document.documentElement.classList.add('dark');
+        document.documentElement.style.colorScheme = 'dark';
+      } else {
+        document.documentElement.classList.remove('dark');
+        document.documentElement.style.colorScheme = 'light';
+      }
     }
   };
 

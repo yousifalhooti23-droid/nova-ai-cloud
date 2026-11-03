@@ -222,7 +222,7 @@ describe('NOVA web UI', () => {
     ];
 
     render(<App />);
-    const box = await screen.findByPlaceholderText('اسأل عن أي شيء…');
+    const box = await screen.findByPlaceholderText(/اسأل عن أي شيء|اكتب رسالتك هنا/);
     await userEvent.type(box, 'قل مرحبًا');
     await userEvent.keyboard('{Enter}');
 

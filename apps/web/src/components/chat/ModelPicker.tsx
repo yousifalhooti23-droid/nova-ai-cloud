@@ -88,15 +88,15 @@ export function ModelPicker({
           type="button"
           onClick={toggle}
           className={cn(
-            'flex max-w-full min-w-0 items-center gap-1.5 rounded-lg border border-line-strong bg-elevated px-2.5 py-1.5 text-[12px] text-muted transition-colors hover:border-[#46505e] hover:text-text',
-            open && 'border-accent/50 text-text',
-            compact && 'px-2 py-1.5 sm:py-1 text-[11.5px]',
+            'flex max-w-full min-w-0 items-center gap-2 rounded-xl border border-line bg-surface/90 px-3 py-1.5 text-[12.5px] font-medium text-text shadow-xs transition-all hover:border-accent/40 hover:bg-surface hover:shadow-sm',
+            open && 'border-accent text-accent shadow-sm',
+            compact && 'px-2 py-1 text-[11.5px] rounded-lg',
           )}
           title={t('model.title')}
         >
-          <Cpu size={13} className={cn('shrink-0', selected ? 'text-info' : 'text-accent')} />
-          <span className="max-w-[138px] sm:max-w-[200px] min-w-0 truncate">{autoLabel}</span>
-          <ChevronDown size={13} className="shrink-0 text-dim" />
+          <Sparkles size={14} className={cn('shrink-0', selected ? 'text-amber-500' : 'text-accent')} />
+          <span className="max-w-[138px] sm:max-w-[200px] min-w-0 truncate font-medium">{autoLabel}</span>
+          <ChevronDown size={13} className="shrink-0 text-muted" />
         </button>
       )}
     >

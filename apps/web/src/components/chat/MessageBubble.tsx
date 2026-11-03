@@ -151,12 +151,12 @@ export const MessageBubble = memo(function MessageBubble({
 
         <div
           className={cn(
-            'rounded-xl border px-3.5 py-2.5',
+            'rounded-2xl border px-4 py-3 text-[13.5px] leading-relaxed shadow-sm',
             isUser
-              ? 'border-line-strong bg-elevated'
+              ? 'border-line-strong bg-elevated/90 text-text'
               : failed
-                ? 'border-danger/35 bg-[#1d1417]'
-                : 'border-line bg-panel',
+                ? 'border-danger/35 bg-danger/10'
+                : 'border-line bg-surface text-text',
           )}
         >
           {isTool ? (
@@ -335,15 +335,23 @@ function ErrorMessageContent({ message }: { message: ChatMessage }) {
 }
 
 function Avatar({ role }: { role: ChatMessage['role'] }) {
-  const styles =
-    role === 'user'
-      ? 'bg-info/15 text-info border-info/25'
-      : role === 'tool'
-        ? 'bg-warning/12 text-warning border-warning/25'
-        : 'bg-accent/15 text-accent border-accent/25';
+  if (role === 'user') {
+    return (
+      <div className="mt-1 grid h-7 w-7 shrink-0 place-items-center rounded-xl bg-[#1769FF] text-white font-bold text-[12px] shadow-sm">
+        <User size={14} />
+      </div>
+    );
+  }
+  if (role === 'tool') {
+    return (
+      <div className="mt-1 grid h-7 w-7 shrink-0 place-items-center rounded-xl border border-warning/30 bg-warning/10 text-warning">
+        <Wrench size={13} />
+      </div>
+    );
+  }
   return (
-    <div className={cn('mt-5 grid h-6 w-6 sm:h-7 sm:w-7 shrink-0 place-items-center rounded-lg border', styles)}>
-      {role === 'user' ? <User size={13} /> : role === 'tool' ? <Wrench size={12} /> : <Bot size={13} />}
+    <div className="mt-1 grid h-7 w-7 shrink-0 place-items-center rounded-xl border border-accent/20 bg-accent/10 p-1 shadow-sm overflow-hidden">
+      <img src="/nova-logo.png" alt="NOVA" className="h-full w-full object-contain" />
     </div>
   );
 }

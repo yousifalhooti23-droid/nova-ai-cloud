@@ -36,6 +36,20 @@ function Shell() {
   const offline = useAppStore((s) => s.offline);
   const toasts = useAppStore((s) => s.toasts);
   const dismissToast = useAppStore((s) => s.dismissToast);
+  const theme = useAppStore((s) => s.theme);
+
+  // Sync theme to root class
+  useEffect(() => {
+    if (typeof document !== 'undefined') {
+      if (theme === 'dark') {
+        document.documentElement.classList.add('dark');
+        document.documentElement.style.colorScheme = 'dark';
+      } else {
+        document.documentElement.classList.remove('dark');
+        document.documentElement.style.colorScheme = 'light';
+      }
+    }
+  }, [theme]);
 
   // Boot: fetch health/auth/models/sandbox/settings, then keep health fresh so the
   // provider strip reflects reality (e.g. Workers AI becoming reachable).

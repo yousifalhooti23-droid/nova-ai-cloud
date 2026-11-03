@@ -7,7 +7,6 @@ import { formatNumber } from '@/lib/format';
 import { authMediaUrl, isImageMime, isVideoMime } from '@/lib/media';
 import { useAppStore } from '@/store/app';
 import { useChatStore } from '@/store/chat';
-import { ModelPicker } from './ModelPicker';
 import { IconButton, Spinner } from '@/components/ui';
 import { SkillsModal } from '../skills/SkillsModal';
 
@@ -82,7 +81,7 @@ export function Composer({ projectId, onNeedProject }: { projectId?: string | nu
         ? t('studio.placeholder.website')
         : projectId
           ? t('chat.placeholderWithProject')
-          : t('chat.placeholder');
+          : (locale === 'ar' ? 'اكتب رسالتك هنا...' : t('chat.placeholder'));
 
   const modes: { id: StudioMode; label: string; icon: React.ReactNode }[] = [
     { id: 'chat', label: t('studio.mode.chat'), icon: <MessageSquare size={12} /> },
@@ -217,12 +216,12 @@ export function Composer({ projectId, onNeedProject }: { projectId?: string | nu
             if (e.dataTransfer?.files?.length) void onFiles(e.dataTransfer.files);
           }}
           className={cn(
-            'rounded-xl border bg-panel transition-colors',
+            'nova-composer-card border transition-all p-1.5 sm:p-2.5',
             dragging
               ? 'border-accent bg-accent/5'
               : streaming
                 ? 'border-accent/45'
-                : 'border-line-strong focus-within:border-accent/55',
+                : 'border-line focus-within:border-accent/60',
           )}
         >
           <textarea
@@ -245,45 +244,71 @@ export function Composer({ projectId, onNeedProject }: { projectId?: string | nu
               }
             }}
             placeholder={dragging ? t('studio.dropHint') : placeholder}
-            className="max-h-[200px] w-full resize-none bg-transparent px-3 pt-2.5 sm:px-3.5 sm:pt-3 text-[15px] sm:text-[13.5px] leading-relaxed text-text outline-none placeholder:text-dim disabled:opacity-60"
+            className="max-h-[220px] w-full resize-none bg-transparent px-3 pt-2 text-[14.5px] leading-relaxed text-text outline-none placeholder:text-dim disabled:opacity-60"
           />
 
-          <div className="flex items-center gap-1.5 px-2 py-1.5 sm:gap-2 sm:px-2.5 sm:py-2">
-            <input
-              ref={fileRef}
-              type="file"
-              multiple
-              accept="image/*,video/*,.txt,.md,.json,.csv,.log,.yml,.yaml,.xml,.ts,.tsx,.js,.jsx,.py,.go,.rs,.java,.c,.cpp,.h,.css,.html,.sh,.sql,.toml"
-              className="hidden"
-              onChange={(e) => void onFiles(e.target.files)}
-            />
-            <IconButton
-              label={t('chat.attach')}
-              className="shrink-0"
-              onClick={() => (projectId ? fileRef.current?.click() : (onNeedProject?.(), fileRef.current?.click()))}
-              disabled={composer.uploading}
-            >
-              {composer.uploading ? <Spinner size={14} /> : <Paperclip size={15} />}
-            </IconButton>
+          <div className="flex items-center justify-between gap-1.5 px-1 pt-1.5 sm:gap-2">
+            <div className="flex items-center gap-1 sm:gap-1.5 flex-wrap">
+              <input
+                ref={fileRef}
+                type="file"
+                multiple
+                accept="image/*,video/*,.txt,.md,.json,.csv,.log,.yml,.yaml,.xml,.ts,.tsx,.js,.jsx,.py,.go,.rs,.java,.c,.cpp,.h,.css,.html,.sh,.sql,.toml"
+                className="hidden"
+                onChange={(e) => void onFiles(e.target.files)}
+              />
+              <IconButton
+                label={t('chat.attach')}
+                className="shrink-0 text-muted hover:text-text hover:bg-elevated rounded-xl"
+                onClick={() => (projectId ? fileRef.current?.click() : (onNeedProject?.(), fileRef.current?.click()))}
+                disabled={composer.uploading}
+              >
+                {composer.uploading ? <Spinner size={15} /> : <Paperclip size={16} />}
+              </IconButton>
 
-            <ModelPicker
-              value={composer.modelId}
-              onChange={(modelId) => setComposer({ modelId })}
-              modelClass={composer.modelClass}
-              onClassChange={(c: ModelClass) => setComposer({ modelClass: c })}
-              placement="top"
-              className="min-w-0 shrink"
-              compact
-            />
+              {/* Tools Pill */}
+              <button
+                type="button"
+                onClick={() => setSkillsOpen(true)}
+                title={locale === 'ar' ? 'متجر الأدوات والمهارات الذكية' : 'AI Tools & Skills'}
+                className="inline-flex items-center gap-1.5 rounded-full border border-line bg-elevated/70 px-2.5 py-1 text-[11px] font-medium text-muted hover:text-text hover:border-line-strong transition-colors"
+              >
+                <Puzzle size={12} className="text-accent" />
+                <span>{locale === 'ar' ? 'الأدوات' : 'Tools'}</span>
+              </button>
 
-            <div className="ms-auto flex shrink-0 items-center gap-1.5 sm:gap-2">
+              {/* Web Search Pill */}
+              <button
+                type="button"
+                onClick={() => {
+                  setComposer({ webSearch: !composer.webSearch });
+                  taRef.current?.focus();
+                }}
+                className={cn(
+                  'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium transition-all',
+                  composer.webSearch
+                    ? 'border-sky-500/80 bg-sky-500/15 text-sky-600 dark:text-sky-300 font-semibold shadow-sm'
+                    : 'border-line bg-elevated/70 text-muted hover:text-text hover:border-line-strong',
+                )}
+              >
+                <Globe size={12} className={cn(composer.webSearch ? 'text-sky-500' : 'text-muted')} />
+                <span>{locale === 'ar' ? 'بحث الويب' : 'Web Search'}</span>
+                {composer.webSearch ? <span className="h-1.5 w-1.5 rounded-full bg-sky-500 animate-pulse" /> : null}
+              </button>
+            </div>
+
+            <div className="flex shrink-0 items-center gap-2">
               {tokens > 0 ? (
-                <span className="hidden font-mono text-[10.5px] text-dim sm:inline">~{formatNumber(tokens)} tok</span>
+                <span className="hidden font-mono text-[10.5px] text-dim md:inline">~{formatNumber(tokens)} tok</span>
               ) : null}
               {streaming ? (
-                <button type="button" onClick={stop} className="btn btn-outline !px-2.5 !py-1.5 sm:!px-3 sm:!py-2 !border-danger/40 !text-danger">
-                  <Square size={12} />
-                  <span>{t('chat.stop')}</span>
+                <button
+                  type="button"
+                  onClick={stop}
+                  className="flex h-9 w-9 items-center justify-center rounded-full border border-danger/40 bg-danger/10 text-danger transition-colors hover:bg-danger/20"
+                  title={t('chat.stop')}
+                >
+                  <Square size={13} />
                 </button>
               ) : (
                 <button
@@ -293,11 +318,16 @@ export function Composer({ projectId, onNeedProject }: { projectId?: string | nu
                   }}
                   onClick={submit}
                   disabled={!canSend}
-                  className="btn btn-primary !px-3 !py-1.5 sm:!px-3.5 sm:!py-2 !text-[12.5px] sm:!text-[13px]"
+                  className={cn(
+                    'flex h-9 w-9 items-center justify-center rounded-full transition-all duration-150',
+                    canSend
+                      ? 'bg-[#1769FF] text-white shadow-[0_2px_10px_rgba(23,105,255,0.4)] hover:bg-[#1255D4] hover:scale-105 active:scale-95'
+                      : 'bg-elevated border border-line text-dim cursor-not-allowed opacity-50',
+                  )}
                   title="Enter"
+                  aria-label={t('chat.send')}
                 >
-                  <Send size={13} />
-                  <span>{t('chat.send')}</span>
+                  <Send size={14} className="rtl:rotate-180" />
                 </button>
               )}
             </div>

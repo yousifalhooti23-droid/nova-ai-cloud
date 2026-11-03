@@ -1,33 +1,95 @@
 @import "tailwindcss";
 
 /* ------------------------------------------------------------------ *
- * NOVA design tokens — dark UI inspired by Claude + Cursor.
- * Only semantic tokens are exposed so the whole app stays consistent.
+ * NOVA Brand Design Tokens — Unified Light & Dark System
+ * Inspired by Claude iOS & NOVA Visual Identity
  * ------------------------------------------------------------------ */
 @theme {
-  --color-bg: #0b0d10;
-  --color-surface: #101318;
-  --color-panel: #151920;
-  --color-elevated: #1b2029;
-  --color-line: #232a34;
-  --color-line-strong: #333c49;
-  --color-text: #e8eaed;
-  --color-muted: #98a2b0;
-  --color-dim: #6b7480;
-  --color-accent: #d97757;
-  --color-accent-hover: #e2876a;
-  --color-accent-soft: #2a1c17;
-  --color-info: #7aa2f7;
-  --color-success: #79c98d;
-  --color-warning: #e0b341;
-  --color-danger: #e5697a;
+  --color-bg: var(--color-bg);
+  --color-surface: var(--color-surface);
+  --color-panel: var(--color-panel);
+  --color-elevated: var(--color-elevated);
+  --color-line: var(--color-line);
+  --color-line-strong: var(--color-line-strong);
+  --color-text: var(--color-text);
+  --color-muted: var(--color-muted);
+  --color-dim: var(--color-dim);
+  --color-accent: var(--color-accent);
+  --color-accent-hover: var(--color-accent-hover);
+  --color-accent-soft: var(--color-accent-soft);
+  --color-info: var(--color-info);
+  --color-success: var(--color-success);
+  --color-warning: var(--color-warning);
+  --color-danger: var(--color-danger);
 
-  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
-    "Noto Sans Arabic", "Helvetica Neue", Arial, sans-serif;
-  --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", "Cascadia Code",
-    Menlo, Consolas, "Liberation Mono", monospace;
+  --font-sans: "Segoe UI", Roboto, "Noto Sans Arabic", -apple-system, system-ui, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", "Cascadia Code", Menlo, monospace;
 
-  --radius-panel: 12px;
+  --radius-panel: 16px;
+}
+
+:root {
+  /* NOVA Light Palette (Primary Brand Default) */
+  --color-navy: #071A3D;
+  --color-deep-navy: #0B1F46;
+  --color-electric-blue: #1769FF;
+  --color-secondary-blue: #397BFF;
+  --color-light-blue: #EAF1FF;
+
+  --color-bg: #F7F9FD;
+  --color-surface: #FFFFFF;
+  --color-panel: #FFFFFF;
+  --color-elevated: #F0F4FA;
+  --color-line: #E5EAF3;
+  --color-line-strong: #D5DEEC;
+  --color-text: #101C36;
+  --color-muted: #5C6A82;
+  --color-dim: #8B98AD;
+  --color-accent: #1769FF;
+  --color-accent-hover: #1255D4;
+  --color-accent-soft: #EAF1FF;
+  --color-info: #1769FF;
+  --color-success: #10B981;
+  --color-warning: #F59E0B;
+  --color-danger: #EF4444;
+
+  /* Always Deep Navy Sidebar */
+  --sidebar-bg: #071A3D;
+  --sidebar-surface: #0B1F46;
+  --sidebar-hover: #102652;
+  --sidebar-active: #1769FF;
+  --sidebar-line: #142852;
+  --sidebar-text: #F0F4FC;
+  --sidebar-muted: #95A6C4;
+  --sidebar-dim: #6B7E9F;
+}
+
+html.dark {
+  /* NOVA Dark Palette (Deep Cosmic Navy) */
+  --color-bg: #071021;
+  --color-surface: #0B172E;
+  --color-panel: #0E1D3A;
+  --color-elevated: #13264A;
+  --color-line: #1B315A;
+  --color-line-strong: #274378;
+  --color-text: #F0F4FC;
+  --color-muted: #9BB0D3;
+  --color-dim: #6B80A5;
+  --color-accent: #2977FF;
+  --color-accent-hover: #488BFF;
+  --color-accent-soft: #0E244E;
+  --color-info: #38BDF8;
+  --color-success: #34D399;
+  --color-warning: #FBBF24;
+  --color-danger: #F87171;
+
+  --sidebar-bg: #040B18;
+  --sidebar-surface: #07142A;
+  --sidebar-hover: #0E2244;
+  --sidebar-line: #132950;
+  --sidebar-text: #F0F4FC;
+  --sidebar-muted: #95A6C4;
+  --sidebar-dim: #6B7E9F;
 }
 
 html,
@@ -57,17 +119,32 @@ body {
 }
 
 ::selection {
-  background: color-mix(in oklab, var(--color-accent) 38%, transparent);
+  background: color-mix(in oklab, var(--color-accent) 25%, transparent);
 }
 
-/* Scrollbars: thin, dark, unobtrusive (Cursor-like) */
+/* Subtle Organic Waves Background for Main Chat Canvas */
+.nova-gradient-bg {
+  background-color: var(--color-bg);
+  background-image:
+    radial-gradient(at 0% 0%, rgba(234, 241, 255, 0.7) 0px, transparent 55%),
+    radial-gradient(at 100% 0%, rgba(219, 234, 254, 0.45) 0px, transparent 50%),
+    radial-gradient(at 100% 100%, rgba(234, 241, 255, 0.6) 0px, transparent 50%);
+}
+html.dark .nova-gradient-bg {
+  background-image:
+    radial-gradient(at 0% 0%, rgba(23, 105, 255, 0.12) 0px, transparent 55%),
+    radial-gradient(at 100% 0%, rgba(14, 165, 233, 0.08) 0px, transparent 50%),
+    radial-gradient(at 100% 100%, rgba(23, 105, 255, 0.08) 0px, transparent 50%);
+}
+
+/* Scrollbars: thin, unobtrusive */
 * {
   scrollbar-width: thin;
   scrollbar-color: var(--color-line-strong) transparent;
 }
 *::-webkit-scrollbar {
-  width: 9px;
-  height: 9px;
+  width: 7px;
+  height: 7px;
 }
 *::-webkit-scrollbar-track {
   background: transparent;
@@ -79,12 +156,12 @@ body {
   background-clip: padding-box;
 }
 *::-webkit-scrollbar-thumb:hover {
-  background: #46505e;
+  background: var(--color-dim);
   background-clip: padding-box;
 }
 
 /* ------------------------------------------------------------------ *
- * Component primitives (plain CSS so they work identically in RTL/LTR)
+ * Component primitives
  * ------------------------------------------------------------------ */
 .panel {
   background: var(--color-panel);
@@ -97,15 +174,14 @@ body {
   align-items: center;
   justify-content: center;
   gap: 6px;
-  border-radius: 8px;
+  border-radius: 10px;
   border: 1px solid transparent;
   font-size: 13px;
   font-weight: 500;
   line-height: 1;
-  padding: 8px 12px;
+  padding: 8px 14px;
   cursor: pointer;
-  transition: background-color 0.14s ease, border-color 0.14s ease, color 0.14s ease,
-    opacity 0.14s ease;
+  transition: all 0.16s ease;
   white-space: nowrap;
   user-select: none;
 }
@@ -119,11 +195,14 @@ body {
 }
 .btn-primary {
   background: var(--color-accent);
-  color: #17110e;
+  color: #ffffff;
   font-weight: 600;
+  box-shadow: 0 2px 8px rgba(23, 105, 255, 0.25);
 }
 .btn-primary:hover:not(:disabled) {
   background: var(--color-accent-hover);
+  box-shadow: 0 4px 12px rgba(23, 105, 255, 0.35);
+  transform: translateY(-0.5px);
 }
 .btn-ghost {
   background: transparent;
@@ -135,13 +214,14 @@ body {
   color: var(--color-text);
 }
 .btn-outline {
-  background: var(--color-elevated);
-  border-color: var(--color-line-strong);
+  background: var(--color-surface);
+  border-color: var(--color-line);
   color: var(--color-text);
+  box-shadow: 0 1px 3px rgba(7, 26, 61, 0.02);
 }
 .btn-outline:hover:not(:disabled) {
-  border-color: #46505e;
-  background: #222933;
+  border-color: var(--color-line-strong);
+  background: var(--color-elevated);
 }
 .btn-danger {
   background: color-mix(in oklab, var(--color-danger) 16%, transparent);
@@ -224,11 +304,37 @@ textarea.input {
 }
 
 .card-hover {
-  transition: background-color 0.14s ease, border-color 0.14s ease;
+  transition: all 0.16s ease;
 }
 .card-hover:hover {
   background: var(--color-elevated);
   border-color: var(--color-line-strong);
+  transform: translateY(-1px);
+}
+
+.nova-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-line);
+  border-radius: 16px;
+  box-shadow: 0 2px 10px rgba(7, 26, 61, 0.03);
+  transition: all 0.18s ease;
+}
+.nova-card:hover {
+  border-color: color-mix(in oklab, var(--color-accent) 38%, var(--color-line));
+  box-shadow: 0 6px 20px rgba(23, 105, 255, 0.07);
+  transform: translateY(-1.5px);
+}
+
+.nova-composer-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-line);
+  border-radius: 20px;
+  box-shadow: 0 4px 24px rgba(7, 26, 61, 0.05), 0 1px 3px rgba(7, 26, 61, 0.02);
+  transition: all 0.18s ease;
+}
+.nova-composer-card:focus-within {
+  border-color: color-mix(in oklab, var(--color-accent) 60%, var(--color-line));
+  box-shadow: 0 8px 30px rgba(23, 105, 255, 0.12), 0 0 0 3px rgba(23, 105, 255, 0.06);
 }
 
 .scroll-thin {
